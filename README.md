@@ -36,21 +36,7 @@ lista-contatos/
 ├── ContactForm.js          # Formulário para adicionar/editar contatos
 ├── package.json            # Dependências e scripts do projeto
 ├── README.md               # Este arquivo
-├── AgendaContatos_Udemy_Completo_Unicode_Final.pdf  # Documentação completa do projeto
 ```
-
----
-
-## 📄 Documentação Técnica
-
-📘 Acompanhe o PDF completo com explicações detalhadas de cada parte do código:
-
-👉 [`AgendaContatos_Udemy_Completo_Unicode_Final.pdf`](./AgendaContatos_Udemy_Completo_Unicode_Final.pdf)
-
-Inclui:
-- Roteiro de aulas estilo Udemy
-- Comentários em cada linha do código
-- Estrutura técnica e orientações de uso
 
 ---
 
