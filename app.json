@@ -1,14 +1,13 @@
 {
   "expo": {
-    "name": "lista-contatos",
-    "slug": "lista-contatos",
+    "name": "Controle Financeiro",
+    "slug": "controle-financeiro",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon_192x192.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash_1242x2208.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -17,22 +16,30 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/icon_192x192.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
-      "package": "com.jricardo2012.listacontatos"
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "package": "com.jricardo2012.controlefinanceiro"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/icon_48x48.png"
     },
     "plugins": [
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-location"
     ],
     "extra": {
       "eas": {
-        "projectId": "c0d72a83-4e62-4e79-8b9f-e3461f0ac5ed"
+        "projectId": "2902e199-4927-4988-9338-96b771ba5573"
       }
-    }
+    },
+    "owner": "jricardo2012"
   }
 }
