@@ -31,9 +31,12 @@ export default function ExpenseList({ onEdit = () => {} }) {
           e.amount,
           e.date,
           c.name AS category,
-          c.icon AS icon
+          c.icon AS icon,
+          pm.name AS payment_method,
+          pm.icon AS payment_icon
         FROM expenses e
         LEFT JOIN categories c ON e.categoryId = c.id
+        LEFT JOIN payment_methods pm ON e.payment_method_id = pm.id
         ORDER BY e.date DESC
         LIMIT 50
       `);
@@ -127,6 +130,7 @@ export default function ExpenseList({ onEdit = () => {} }) {
           <View style={styles.expenseMeta}>
             <Text style={styles.expenseCategory} numberOfLines={1}>
               {item.category || 'Sem categoria'}
+              {item.payment_method && ` • ${item.payment_icon || '💳'} ${item.payment_method}`}
             </Text>
             <Text style={styles.expenseDate}>
               {formatDate(item.date)}

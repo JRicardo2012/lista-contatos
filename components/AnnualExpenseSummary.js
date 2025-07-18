@@ -1,5 +1,11 @@
 // components/AnnualExpenseSummary.js
-// VERSÃO MELHORADA - VISUALIZAÇÃO APRIMORADA E MODERNA
+// VERSÃO 2.0 - LAYOUT MELHORADO COM FORMATAÇÃO PT-BR
+// Inclui:
+// - Gráficos com valores formatados em PT-BR (R$ 1.234,56)
+// - Legenda customizada para o gráfico de pizza
+// - Valores detalhados por mês no gráfico de linha
+// - Cards de métricas animados
+// - Layout vertical para categorias
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
@@ -15,12 +21,13 @@ import {
   RefreshControl,
   Alert,
   Animated,
-  StatusBar
+  StatusBar,
+  Platform
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { PieChart, BarChart } from 'react-native-chart-kit';
+import { PieChart, BarChart, LineChart } from 'react-native-chart-kit';
 
-const { width: screenWidth } = Dimensions.get('window');
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 export default function AnnualExpenseSummary() {
   const db = useSQLiteContext();
@@ -29,6 +36,7 @@ export default function AnnualExpenseSummary() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [selectedMetric, setSelectedMetric] = useState('total'); // Para cards interativos
   const [annualData, setAnnualData] = useState({
     totalByCategory: [],
     monthlyData: [],
@@ -40,12 +48,13 @@ export default function AnnualExpenseSummary() {
     mostActiveMonth: null
   });
 
-  // Animações melhoradas
+  // Animações
   const fadeAnim = useState(new Animated.Value(0))[0];
   const slideAnim = useState(new Animated.Value(50))[0];
   const scaleAnim = useState(new Animated.Value(0.9))[0];
+  const [cardAnimations] = useState([...Array(4)].map(() => new Animated.Value(0)));
 
-  // Anos disponíveis (últimos 5 anos + próximo ano)
+  // Anos disponíveis
   const availableYears = useMemo(() => {
     return Array.from({ length: 6 }, (_, i) => {
       const currentYear = new Date().getFullYear();
@@ -59,25 +68,38 @@ export default function AnnualExpenseSummary() {
     }
   }, [db, selectedYear]);
 
-  // Animações de entrada mais suaves
+  // Animações de entrada aprimoradas
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 1000,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
         duration: 800,
         useNativeDriver: true,
       }),
-      Animated.timing(scaleAnim, {
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 20,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
         toValue: 1,
-        duration: 600,
+        tension: 20,
+        friction: 7,
         useNativeDriver: true,
       })
     ]).start();
+
+    // Anima cards em sequência
+    cardAnimations.forEach((anim, index) => {
+      Animated.spring(anim, {
+        toValue: 1,
+        tension: 20,
+        friction: 7,
+        delay: index * 100,
+        useNativeDriver: true,
+      }).start();
+    });
   }, [annualData]);
 
   const loadAnnualData = useCallback(async (isRefresh = false) => {
@@ -89,8 +111,6 @@ export default function AnnualExpenseSummary() {
       }
       setError(null);
       
-      console.log(`📊 Carregando dados anuais para ${selectedYear}...`);
-
       // 1. Buscar gastos por categoria no ano
       const categoryData = await db.getAllAsync(`
         SELECT 
@@ -98,7 +118,9 @@ export default function AnnualExpenseSummary() {
           COALESCE(c.icon, '📦') as icon,
           SUM(CAST(e.amount AS REAL)) as total,
           COUNT(*) as count,
-          AVG(CAST(e.amount AS REAL)) as average
+          AVG(CAST(e.amount AS REAL)) as average,
+          MAX(CAST(e.amount AS REAL)) as max_expense,
+          MIN(CAST(e.amount AS REAL)) as min_expense
         FROM expenses e
         LEFT JOIN categories c ON e.categoryId = c.id
         WHERE strftime('%Y', e.date) = ?
@@ -111,19 +133,22 @@ export default function AnnualExpenseSummary() {
         SELECT 
           strftime('%m', e.date) as month,
           SUM(CAST(e.amount AS REAL)) as total,
-          COUNT(*) as count
+          COUNT(*) as count,
+          AVG(CAST(e.amount AS REAL)) as average
         FROM expenses e
         WHERE strftime('%Y', e.date) = ?
         GROUP BY strftime('%m', e.date)
         ORDER BY month
       `, [selectedYear.toString()]);
 
-      // 3. Buscar total de transações e estatísticas gerais
+      // 3. Buscar estatísticas gerais
       const statsData = await db.getFirstAsync(`
         SELECT 
           COUNT(*) as totalTransactions,
           AVG(CAST(amount AS REAL)) as averagePerTransaction,
-          MAX(CAST(amount AS REAL)) as biggestExpense
+          MAX(CAST(amount AS REAL)) as biggestExpense,
+          MIN(CAST(amount AS REAL)) as smallestExpense,
+          SUM(CAST(amount AS REAL)) as totalAmount
         FROM expenses e
         WHERE strftime('%Y', e.date) = ?
       `, [selectedYear.toString()]);
@@ -133,17 +158,18 @@ export default function AnnualExpenseSummary() {
         SELECT 
           e.description,
           e.amount,
+          e.date,
           c.name as category,
           c.icon as categoryIcon
         FROM expenses e
         LEFT JOIN categories c ON e.categoryId = c.id
         WHERE strftime('%Y', e.date) = ? AND CAST(e.amount AS REAL) = (
-          SELECT MAX(CAST(amount AS REAL)) FROM expenses WHERE strftime('%Y', e.date) = ?
+          SELECT MAX(CAST(amount AS REAL)) FROM expenses WHERE strftime('%Y', date) = ?
         )
         LIMIT 1
       `, [selectedYear.toString(), selectedYear.toString()]);
 
-      // 5. Processar dados para os gráficos
+      // 5. Processar dados
       const processedData = processAnnualData(
         categoryData, 
         monthlyData, 
@@ -151,25 +177,11 @@ export default function AnnualExpenseSummary() {
         biggestExpenseData
       );
       
-      // Debug: verificar dados processados
-      console.log('📊 Dados processados:', {
-        totalAmount: processedData.totalAmount,
-        topCategory: processedData.topCategory,
-        totalTransactions: processedData.totalTransactions
-      });
-      
       setAnnualData(processedData);
-
-      console.log('✅ Dados anuais carregados:', processedData);
 
     } catch (error) {
       console.error('❌ Erro ao carregar dados anuais:', error);
       setError('Erro ao carregar dados. Tente novamente.');
-      Alert.alert(
-        'Erro', 
-        'Não foi possível carregar os dados anuais. Verifique sua conexão e tente novamente.',
-        [{ text: 'OK' }]
-      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -177,23 +189,34 @@ export default function AnnualExpenseSummary() {
   }, [db, selectedYear]);
 
   function processAnnualData(categoryData, monthlyData, statsData, biggestExpenseData) {
-    // Processar dados por categoria com cores melhoradas
-    const totalByCategory = categoryData.map(item => ({
+    // Processar dados por categoria com cores
+    const colors = [
+      '#10B981', '#3B82F6', '#EF4444', '#F59E0B', '#8B5CF6',
+      '#EC4899', '#14B8A6', '#F97316', '#6366F1', '#84CC16'
+    ];
+
+    const totalByCategory = categoryData.map((item, index) => ({
       name: item.category,
       icon: item.icon,
       amount: item.total || 0,
       count: item.count || 0,
       average: item.average || 0,
-      color: getCategoryColor(item.category)
+      maxExpense: item.max_expense || 0,
+      minExpense: item.min_expense || 0,
+      color: colors[index % colors.length],
+      percentage: 0 // Será calculado depois
     }));
 
-    // Categoria principal (maior gasto)
+    // Calcula porcentagens
+    const totalAmount = statsData?.totalAmount || 0;
+    totalByCategory.forEach(cat => {
+      cat.percentage = totalAmount > 0 ? (cat.amount / totalAmount) * 100 : 0;
+    });
+
+    // Categoria principal
     const topCategory = totalByCategory.length > 0 ? totalByCategory[0] : null;
 
-    // Total geral
-    const totalAmount = totalByCategory.reduce((sum, cat) => sum + cat.amount, 0);
-
-    // Processar dados mensais (garantir todos os 12 meses)
+    // Processar dados mensais
     const monthNames = [
       'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
       'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
@@ -204,15 +227,17 @@ export default function AnnualExpenseSummary() {
       const found = monthlyData.find(item => item.month === monthNumber);
       return {
         month: name,
+        monthNumber: index + 1,
         amount: found ? found.total : 0,
-        count: found ? found.count : 0
+        count: found ? found.count : 0,
+        average: found ? found.average : 0
       };
     });
 
     // Encontrar mês mais ativo
     const mostActiveMonth = monthlyProcessed.reduce((max, current) => 
       current.amount > max.amount ? current : max, 
-      { month: '', amount: 0 }
+      { month: '', amount: 0, count: 0 }
     );
 
     return {
@@ -225,703 +250,491 @@ export default function AnnualExpenseSummary() {
       biggestExpense: biggestExpenseData ? {
         description: biggestExpenseData.description,
         amount: biggestExpenseData.amount,
+        date: biggestExpenseData.date,
         category: biggestExpenseData.category,
         categoryIcon: biggestExpenseData.categoryIcon
       } : null,
-      mostActiveMonth
+      mostActiveMonth,
+      smallestExpense: statsData?.smallestExpense || 0
     };
   }
 
-  // 🎨 CORES MELHORADAS COM GRADIENTES
-  function getCategoryColor(categoryName) {
-    const colors = {
-      'Alimentação': ['#10b981', '#059669'],    // Verde
-      'Transporte': ['#3b82f6', '#2563eb'],    // Azul
-      'Moradia': ['#ef4444', '#dc2626'],       // Vermelho
-      'Lazer': ['#f59e0b', '#d97706'],         // Amarelo
-      'Saúde': ['#8b5cf6', '#7c3aed'],         // Roxo
-      'Educação': ['#06b6d4', '#0891b2'],      // Ciano
-      'Compras': ['#ec4899', '#db2777'],       // Rosa
-      'Trabalho': ['#6b7280', '#4b5563'],      // Cinza
-      'Outros': ['#9ca3af', '#6b7280']         // Cinza claro
-    };
-    return colors[categoryName]?.[0] || '#6b7280';
-  }
-
-  // 🔧 FUNÇÃO SEGURA PARA VALORES
-  const SafeValue = (params) => {
-    const { value, type = 'currency', ...options } = params || {};
+  // Formatações melhoradas com padrão PT-BR
+  const formatCurrency = (value, compact = false, showSymbol = true) => {
+    if (value === null || value === undefined || (value === 0 && !compact)) {
+      return showSymbol ? 'R$ 0,00' : '0,00';
+    }
     
-    try {
-      let displayValue;
-      
-      switch (type) {
-        case 'currency':
-          displayValue = formatCurrency(value, options);
-          break;
-        case 'percentage':
-          displayValue = formatPercentage(value, options.total);
-          break;
-        case 'number':
-          displayValue = formatNumber(value, options.compact);
-          break;
-        default:
-          displayValue = String(value || '0');
+    const numValue = parseFloat(value) || 0;
+    
+    // Formato compacto para valores grandes
+    if (compact && numValue >= 1000) {
+      const prefix = showSymbol ? 'R$ ' : '';
+      if (numValue >= 1000000) {
+        // Milhões: 1.5M ao invés de 1,5M (padrão internacional)
+        return `${prefix}${(numValue / 1000000).toFixed(1).replace('.', ',')}M`;
       }
-      
-      // Se retornou algo inválido, força um valor padrão
-      if (!displayValue || displayValue === 'undefined' || displayValue === 'null' || displayValue === '') {
-        switch (type) {
-          case 'currency':
-            displayValue = 'R$ 0,00';
-            break;
-          case 'percentage':
-            displayValue = '0%';
-            break;
-          default:
-            displayValue = '0';
-        }
-      }
-      
-      return displayValue;
-    } catch (error) {
-      console.error('Erro no SafeValue:', error, params);
-      return type === 'currency' ? 'R$ 0,00' : '0';
+      // Milhares: 15.8K ao invés de 15,8K
+      return `${prefix}${(numValue / 1000).toFixed(1).replace('.', ',')}K`;
     }
-  };
-
-  // 🎯 FUNÇÃO ESPECÍFICA PARA CARDS (auto-detecta quando usar compact)
-  const SafeCurrency = (value, forceCompact = false) => {
-    try {
-      const numValue = parseFloat(value);
-      
-      // Se forçou compacto OU valor é muito grande, usa compacto
-      const shouldUseCompact = forceCompact || numValue >= 10000;
-      
-      return SafeValue({ 
-        value: numValue, 
-        type: "currency", 
-        compact: shouldUseCompact 
+    
+    // Formato completo PT-BR
+    if (!showSymbol) {
+      return numValue.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
       });
-    } catch (error) {
-      return 'R$ 0,00';
     }
+    
+    // Formato moeda PT-BR: R$ 1.234,56
+    return numValue.toLocaleString('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
   };
 
-  // 💰 FUNÇÕES DE FORMATAÇÃO CORRIGIDAS - SEMPRE COM CENTAVOS
-  const formatCurrency = (value, options = {}) => {
-    try {
-      const { compact = false } = options;
-      
-      // Converte para número de forma segura
-      let numValue;
-      if (typeof value === 'string') {
-        numValue = parseFloat(value.replace(',', '.'));
-      } else {
-        numValue = parseFloat(value);
-      }
-      
-      // Se não conseguir converter, retorna zero
-      if (isNaN(numValue) || numValue === null || numValue === undefined) {
-        return 'R$ 0,00';
-      }
-      
-      // Formatação compacta para valores grandes (SEM centavos)
-      if (compact) {
-        if (numValue >= 1000000) {
-          const millions = (numValue / 1000000).toFixed(1);
-          return `R$ ${millions.replace('.', ',')}M`;
-        }
-        if (numValue >= 1000) {
-          const thousands = (numValue / 1000).toFixed(numValue >= 10000 ? 0 : 1);
-          return `R$ ${thousands.replace('.', ',')}K`;
-        }
-      }
-      
-      // Formatação padrão brasileira - SEMPRE COM CENTAVOS
-      try {
-        return numValue.toLocaleString('pt-BR', {
-          style: 'currency',
-          currency: 'BRL',
-          minimumFractionDigits: 2, // SEMPRE 2 casas decimais
-          maximumFractionDigits: 2  // SEMPRE 2 casas decimais
-        });
-      } catch (error) {
-        // Fallback manual se toLocaleString falhar
-        const inteiro = Math.floor(numValue);
-        const decimal = Math.round((numValue - inteiro) * 100).toString().padStart(2, '0');
-        const inteiroFormatado = inteiro.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-        return `R$ ${inteiroFormatado},${decimal}`;
-      }
-    } catch (error) {
-      console.error('Erro na formatação de moeda:', error, value);
-      return 'R$ 0,00';
-    }
+  const formatPercentage = (value) => {
+    const numValue = parseFloat(value) || 0;
+    return `${numValue.toFixed(1).replace('.', ',')}%`;
   };
 
-  const formatPercentage = (value, total) => {
-    try {
-      const numValue = parseFloat(value);
-      const numTotal = parseFloat(total);
-      
-      if (isNaN(numValue) || isNaN(numTotal) || numTotal === 0) {
-        return '0%';
-      }
-      
-      const percentage = ((numValue / numTotal) * 100).toFixed(1);
-      return `${percentage.replace('.', ',')}%`;
-    } catch (error) {
-      console.error('Erro na formatação de porcentagem:', error, value, total);
-      return '0%';
-    }
+  const formatNumber = (value) => {
+    if (value === null || value === undefined) return '0';
+    const numValue = parseInt(value) || 0;
+    return numValue.toLocaleString('pt-BR');
   };
-
-  const formatNumber = (value, compact = false) => {
-    try {
-      let numValue;
-      if (typeof value === 'string') {
-        numValue = parseInt(value);
-      } else {
-        numValue = parseInt(value);
-      }
-      
-      if (isNaN(numValue)) {
-        return '0';
-      }
-      
-      if (compact) {
-        if (numValue >= 1000000) {
-          return `${(numValue / 1000000).toFixed(1).replace('.', ',')}M`;
-        }
-        if (numValue >= 1000) {
-          return `${(numValue / 1000).toFixed(numValue >= 10000 ? 0 : 1).replace('.', ',')}K`;
-        }
-      }
-      
-      try {
-        return numValue.toLocaleString('pt-BR');
-      } catch (error) {
-        // Fallback manual
-        return numValue.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-      }
-    } catch (error) {
-      console.error('Erro na formatação de número:', error, value);
-      return '0';
-    }
-  };
-
-  // 🎨 FUNÇÃO PARA DETERMINAR COR DO VALOR
-  function getValueColor(value, maxValue) {
-    const percentage = (value / maxValue) * 100;
-    if (percentage >= 80) return '#ef4444'; // Vermelho para valores altos
-    if (percentage >= 60) return '#f59e0b'; // Amarelo para valores médio-altos
-    if (percentage >= 40) return '#10b981'; // Verde para valores médios
-    return '#6b7280'; // Cinza para valores baixos
-  }
 
   // Pull to refresh
   const onRefresh = useCallback(() => {
     loadAnnualData(true);
   }, [loadAnnualData]);
 
-  // Dados para o gráfico de pizza melhorados
+  // Dados para gráficos otimizados
   const pieChartData = useMemo(() => {
     return annualData.totalByCategory.slice(0, 5).map(item => ({
-      name: `${item.name}\n${formatPercentage(item.amount, annualData.totalAmount)}`,
+      name: item.name,
       population: item.amount,
       color: item.color,
       legendFontColor: '#374151',
-      legendFontSize: 12
+      legendFontSize: 11
     }));
-  }, [annualData.totalByCategory, annualData.totalAmount]);
+  }, [annualData.totalByCategory]);
 
-  // Dados para o gráfico de barras melhorados com formatação
-  const barChartData = useMemo(() => ({
-    labels: annualData.monthlyData.map(item => item.month),
+  const lineChartData = useMemo(() => ({
+    labels: annualData.monthlyData ? annualData.monthlyData.map(item => item.month) : [],
     datasets: [{
-      data: annualData.monthlyData.map(item => item.amount || 0.1),
-      color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
+      data: annualData.monthlyData ? annualData.monthlyData.map(item => item.amount || 0.01) : [0.01], // Evita zero que pode causar erro
+      color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
       strokeWidth: 3
     }]
   }), [annualData.monthlyData]);
 
-  // 🎨 CONFIGURAÇÃO MELHORADA DOS GRÁFICOS com formatação brasileira
-  const chartConfig = useMemo(() => ({
-    backgroundColor: 'transparent',
+  const chartConfig = {
     backgroundGradientFrom: '#ffffff',
     backgroundGradientFromOpacity: 0,
     backgroundGradientTo: '#ffffff',
     backgroundGradientToOpacity: 0,
+    color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
+    strokeWidth: 2,
+    barPercentage: 0.5,
+    useShadowColorFromDataset: false,
     decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(55, 65, 81, ${opacity})`,
-    style: {
-      borderRadius: 16
-    },
-    propsForBackgroundLines: {
-      strokeDasharray: '3,3',
-      stroke: '#e5e7eb',
-      strokeWidth: 1
-    },
     propsForLabels: {
-      fontSize: 11,
-      fontWeight: '600'
-    },
-    // Formatação customizada para valores nos gráficos
-    formatYLabel: (value) => formatCurrency(value, { compact: true, showSymbol: false }),
-    formatXLabel: (value) => value
-  }), []);
+      fontSize: 10
+    }
+  };
 
-  // 🎨 SKELETON LOADING COMPONENT
-  const SkeletonCard = ({ width = '100%', height = 120 }) => (
-    <View style={[styles.skeletonCard, { width, height }]}>
-      <View style={styles.skeletonContent}>
-        <View style={styles.skeletonLine} />
-        <View style={[styles.skeletonLine, { width: '60%' }]} />
-        <View style={[styles.skeletonLine, { width: '40%' }]} />
-      </View>
-    </View>
+  // Componente de Card Métrica Interativo
+  const MetricCard = ({ icon, title, value, subtitle, color, index, onPress }) => (
+    <Animated.View style={{
+      transform: [{
+        scale: cardAnimations[index] || 1
+      }],
+      opacity: cardAnimations[index] || 1
+    }}>
+      <TouchableOpacity 
+        style={[styles.metricCard, { borderTopColor: color }]}
+        activeOpacity={0.8}
+        onPress={onPress}
+      >
+        <View style={[styles.metricIconContainer, { backgroundColor: color + '15' }]}>
+          <Text style={styles.metricIcon}>{icon}</Text>
+        </View>
+        <Text style={styles.metricTitle}>{title}</Text>
+        <Text style={[styles.metricValue, { color }]}>{value || 'R$ 0,00'}</Text>
+        {subtitle && <Text style={styles.metricSubtitle} numberOfLines={2}>{subtitle}</Text>}
+      </TouchableOpacity>
+    </Animated.View>
   );
 
-  const renderYearItem = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.yearItem,
-        selectedYear === item && styles.yearItemSelected
-      ]}
-      onPress={() => {
-        setSelectedYear(item);
-        setYearModalVisible(false);
-      }}
-      activeOpacity={0.7}
+  // Componente de Categoria Card
+  const CategoryCard = ({ category, index }) => (
+    <TouchableOpacity 
+      style={[styles.categoryCard, { borderLeftColor: category.color }]}
+      activeOpacity={0.8}
     >
-      <Text style={[
-        styles.yearItemText,
-        selectedYear === item && styles.yearItemTextSelected
-      ]}>
-        {item}
-      </Text>
-      {selectedYear === item && (
-        <View style={styles.yearCheckContainer}>
-          <Text style={styles.yearCheckmark}>✓</Text>
+      <View style={styles.categoryContent}>
+        <View style={styles.categoryLeft}>
+          <View style={[styles.categoryIcon, { backgroundColor: category.color + '15' }]}>
+            <Text style={styles.categoryEmoji}>{category.icon}</Text>
+          </View>
+          <View style={styles.categoryInfo}>
+            <Text style={styles.categoryName} numberOfLines={1}>{category.name}</Text>
+            <View style={styles.categoryStats}>
+              <Text style={styles.categoryStatInline}>
+                {category.count} transações • {formatPercentage(category.percentage)} do total
+              </Text>
+            </View>
+          </View>
         </View>
-      )}
+        <View style={styles.categoryRight}>
+          <Text style={[styles.categoryRank, { color: category.color }]}>#{index + 1}</Text>
+          <Text style={[styles.categoryAmount, { color: category.color }]}>
+            {formatCurrency(category.amount)}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.categoryProgressBar}>
+        <View 
+          style={[
+            styles.categoryProgressFill, 
+            { 
+              width: `${category.percentage}%`,
+              backgroundColor: category.color 
+            }
+          ]} 
+        />
+      </View>
     </TouchableOpacity>
   );
 
   if (loading && !refreshing) {
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#10b981" />
-        
-        {/* Header Skeleton */}
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>📈 Resumo Anual</Text>
-            <Text style={styles.subtitle}>Carregando dados para {selectedYear}...</Text>
-            <View style={styles.yearSelectorSkeleton}>
-              <ActivityIndicator size="small" color="#ffffff" />
-            </View>
-          </View>
-        </View>
-
-        {/* Content Skeletons */}
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <SkeletonCard height={140} />
-          <View style={styles.skeletonGrid}>
-            <SkeletonCard width="47%" height={100} />
-            <SkeletonCard width="47%" height={100} />
-            <SkeletonCard width="47%" height={100} />
-            <SkeletonCard width="47%" height={100} />
-          </View>
-          <SkeletonCard height={200} />
-          <SkeletonCard height={250} />
-        </ScrollView>
-      </View>
-    );
-  }
-
-  if (error && !annualData.totalAmount) {
-    return (
-      <View style={styles.errorContainer}>
-        <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
-        <View style={styles.errorContent}>
-          <Text style={styles.errorIcon}>⚠️</Text>
-          <Text style={styles.errorTitle}>Ops! Algo deu errado</Text>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => loadAnnualData()}>
-            <Text style={styles.retryButtonText}>🔄 Tentar Novamente</Text>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.loadingContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#6366F1" />
+        <ActivityIndicator size="large" color="#6366F1" />
+        <Text style={styles.loadingText}>Preparando análise de {selectedYear}...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#10b981" />
+      <StatusBar barStyle="light-content" backgroundColor="#6366F1" />
       
-      {/* Header Melhorado */}
+      {/* Header Redesenhado */}
       <View style={styles.header}>
-        <View style={styles.headerBackground} />
+        <View style={styles.headerPattern} />
         <View style={styles.headerContent}>
           <View style={styles.headerTop}>
-            <Text style={styles.title}>📈 Resumo Anual</Text>
-            <Text style={styles.subtitle}>Análise completa dos seus gastos</Text>
+            <Text style={styles.headerTitle}>📊 Resumo Anual</Text>
+            <TouchableOpacity 
+              style={styles.yearButton}
+              onPress={() => setYearModalVisible(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.yearButtonText}>{selectedYear}</Text>
+              <Text style={styles.yearButtonIcon}>▼</Text>
+            </TouchableOpacity>
           </View>
           
-          <TouchableOpacity 
-            style={styles.yearSelector}
-            onPress={() => setYearModalVisible(true)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.yearSelectorContent}>
-              <Text style={styles.yearText}>{selectedYear}</Text>
-              <View style={styles.yearArrowContainer}>
-                <Text style={styles.yearArrow}>▼</Text>
+          {/* Total Principal */}
+          <View style={styles.totalContainer}>
+            <Text style={styles.totalLabel}>Total de Gastos em {selectedYear}</Text>
+            <Text style={styles.totalAmount}>
+              {formatCurrency(annualData.totalAmount)}
+            </Text>
+            <View style={styles.totalStats}>
+              <View style={styles.totalStat}>
+                <Text style={styles.totalStatValue}>{formatNumber(annualData.totalTransactions)}</Text>
+                <Text style={styles.totalStatLabel}>transações</Text>
+              </View>
+              <View style={styles.totalStatDivider} />
+              <View style={styles.totalStat}>
+                <Text style={styles.totalStatValue}>
+                  {annualData.monthlyData && annualData.monthlyData.filter(m => m.amount > 0).length > 0 ? 
+                    formatCurrency(
+                      annualData.totalAmount / 
+                      annualData.monthlyData.filter(m => m.amount > 0).length
+                    ) : 
+                    'R$ 0,00'
+                  }
+                </Text>
+                <Text style={styles.totalStatLabel}>
+                  média {
+                    annualData.monthlyData && annualData.monthlyData.filter(m => m.amount > 0).length > 0 && 
+                    annualData.monthlyData.filter(m => m.amount > 0).length < 12 ? 
+                      'real' : 
+                      'mensal'
+                  }
+                </Text>
               </View>
             </View>
-          </TouchableOpacity>
+          </View>
         </View>
       </View>
 
       <ScrollView 
-        style={styles.content} 
+        style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={['#10b981']}
-            tintColor="#10b981"
-            progressBackgroundColor="#ffffff"
+            colors={['#6366F1']}
+            tintColor="#6366F1"
           />
         }
       >
-        <Animated.View style={{ 
+        <Animated.View style={{
           opacity: fadeAnim,
           transform: [{ translateY: slideAnim }, { scale: scaleAnim }]
         }}>
-          {/* Card Principal Melhorado */}
-          {annualData.topCategory && (
-            <View style={styles.heroCard}>
-              <View style={styles.heroBackground} />
-              <View style={styles.heroContent}>
-                <View style={styles.heroIcon}>
-                  <Text style={styles.heroEmoji}>{annualData.topCategory.icon}</Text>
-                </View>
-                <View style={styles.heroText}>
-                  <Text style={styles.heroLabel}>Categoria que mais gastou</Text>
-                  <Text style={styles.heroCategory}>
-                    {annualData.topCategory.name}
-                  </Text>
-                  <Text style={styles.heroAmount}>
-                    {formatCurrency(annualData.topCategory.amount, { compact: true })}
-                  </Text>
-                  <View style={styles.heroStats}>
-                    <View style={styles.heroStat}>
-                      <Text style={styles.heroStatValue}>
-                        {formatPercentage(annualData.topCategory.amount, annualData.totalAmount)}
-                      </Text>
-                      <Text style={styles.heroStatLabel}>do total</Text>
-                    </View>
-                    <View style={styles.heroStat}>
-                      <Text style={styles.heroStatValue}>
-                        {annualData.topCategory.count}
-                      </Text>
-                      <Text style={styles.heroStatLabel}>transações</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </View>
-          )}
-
-          {/* Cards de Estatísticas Melhorados */}
-          <View style={styles.statsContainer}>
-            <Text style={styles.sectionTitle}>Estatísticas Gerais</Text>
-            <View style={styles.statsGrid}>
-              <View style={[styles.statCard, styles.statCardPrimary]}>
-                <View style={styles.statIconContainer}>
-                  <Text style={styles.statIcon}>💰</Text>
-                </View>
-                <Text style={styles.statValue}>
-                  {SafeCurrency(annualData.totalAmount, true)}
-                </Text>
-                <Text style={styles.statLabel}>Total Gasto</Text>
-                <View style={styles.statProgress}>
-                  <View style={[styles.statProgressBar, { width: '100%' }]} />
-                </View>
-              </View>
-
-              <View style={styles.statCard}>
-                <View style={styles.statIconContainer}>
-                  <Text style={styles.statIcon}>📊</Text>
-                </View>
-                <Text style={styles.statValue}>
-                  {SafeCurrency(annualData.totalAmount / 12)}
-                </Text>
-                <Text style={styles.statLabel}>Média Mensal</Text>
-                <View style={styles.statProgress}>
-                  <View style={[styles.statProgressBar, { width: '75%' }]} />
-                </View>
-              </View>
-
-              <View style={styles.statCard}>
-                <View style={styles.statIconContainer}>
-                  <Text style={styles.statIcon}>🎯</Text>
-                </View>
-                <Text style={styles.statValue}>
-                  {SafeValue({ 
-                    value: annualData.totalTransactions, 
-                    type: "number", 
-                    compact: true 
-                  })}
-                </Text>
-                <Text style={styles.statLabel}>Transações</Text>
-                <View style={styles.statProgress}>
-                  <View style={[styles.statProgressBar, { width: '60%' }]} />
-                </View>
-              </View>
-
-              <View style={styles.statCard}>
-                <View style={styles.statIconContainer}>
-                  <Text style={styles.statIcon}>💳</Text>
-                </View>
-                <Text style={styles.statValue}>
-                  {SafeCurrency(annualData.averagePerTransaction)}
-                </Text>
-                <Text style={styles.statLabel}>Média/Transação</Text>
-                <View style={styles.statProgress}>
-                  <View style={[styles.statProgressBar, { width: '45%' }]} />
-                </View>
-              </View>
-            </View>
+          
+          {/* Cards de Métricas */}
+          <View style={styles.metricsGrid}>
+            <MetricCard
+              icon="📅"
+              title={
+                annualData.monthlyData && annualData.monthlyData.filter(m => m.amount > 0).length > 0 && 
+                annualData.monthlyData.filter(m => m.amount > 0).length < 12 ? 
+                  "Média Real" : 
+                  "Média Mensal"
+              }
+              value={
+                annualData.monthlyData && annualData.monthlyData.filter(m => m.amount > 0).length > 0 ?
+                  formatCurrency(
+                    annualData.totalAmount / 
+                    annualData.monthlyData.filter(m => m.amount > 0).length
+                  ) :
+                  'R$ 0,00'
+              }
+              subtitle={`${annualData.monthlyData ? annualData.monthlyData.filter(m => m.amount > 0).length : 0} meses ativos`}
+              color="#10B981"
+              index={0}
+            />
+            <MetricCard
+              icon="💰"
+              title="Média/Transação"
+              value={formatCurrency(annualData.averagePerTransaction)}
+              subtitle={`${annualData.totalTransactions} transações`}
+              color="#3B82F6"
+              index={1}
+            />
+            <MetricCard
+              icon="🚀"
+              title="Maior Gasto"
+              value={formatCurrency(annualData.biggestExpense?.amount || 0)}
+              subtitle={annualData.biggestExpense?.description}
+              color="#EF4444"
+              index={2}
+            />
+            <MetricCard
+              icon="🏆"
+              title="Categoria Top"
+              value={annualData.topCategory?.name || 'Nenhuma'}
+              subtitle={annualData.topCategory ? formatCurrency(annualData.topCategory.amount) : 'R$ 0,00'}
+              color="#8B5CF6"
+              index={3}
+            />
           </View>
 
-          {/* Cards de Insights Melhorados */}
-          <View style={styles.insightsContainer}>
-            <Text style={styles.sectionTitle}>Insights do Ano</Text>
-            
-            {/* Maior Despesa */}
-            {annualData.biggestExpense && (
-              <View style={styles.insightCard}>
-                <View style={styles.insightHeader}>
-                  <View style={styles.insightIconContainer}>
-                    <Text style={styles.insightIcon}>💎</Text>
-                  </View>
-                  <View style={styles.insightHeaderText}>
-                    <Text style={styles.insightTitle}>Maior Despesa Individual</Text>
-                    <Text style={styles.insightAmount}>
-                      {SafeCurrency(annualData.biggestExpense.amount)}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.insightContent}>
-                  <Text style={styles.insightDescription}>
-                    {annualData.biggestExpense.description}
-                  </Text>
-                  <View style={styles.insightBadge}>
-                    <Text style={styles.insightBadgeText}>
-                      📂 {annualData.biggestExpense.category || 'Sem categoria'}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {/* Mês Mais Ativo */}
-            {annualData.mostActiveMonth && annualData.mostActiveMonth.amount > 0 && (
-              <View style={styles.insightCard}>
-                <View style={styles.insightHeader}>
-                  <View style={styles.insightIconContainer}>
-                    <Text style={styles.insightIcon}>🔥</Text>
-                  </View>
-                  <View style={styles.insightHeaderText}>
-                    <Text style={styles.insightTitle}>Mês Mais Movimentado</Text>
-                    <Text style={styles.insightAmount}>
-                      {SafeCurrency(annualData.mostActiveMonth.amount)}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.insightContent}>
-                  <Text style={styles.insightDescription}>
-                    {annualData.mostActiveMonth.month} foi seu mês com mais gastos
-                  </Text>
-                  <View style={styles.insightBadge}>
-                    <Text style={styles.insightBadgeText}>
-                      📊 {formatNumber(annualData.mostActiveMonth.count)} transações
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            )}
-          </View>
-
-          {/* Top Categorias Melhoradas */}
-          {annualData.totalByCategory.length > 1 && (
-            <View style={styles.categoriesContainer}>
-              <Text style={styles.sectionTitle}>Top Categorias</Text>
-              <View style={styles.categoriesGrid}>
-                {annualData.totalByCategory.slice(1, 4).map((category, index) => (
-                  <View key={index} style={styles.categoryCard}>
-                    <View style={styles.categoryHeader}>
-                      <View style={[
-                        styles.categoryIconContainer,
-                        { backgroundColor: category.color }
-                      ]}>
-                        <Text style={styles.categoryIcon}>{category.icon}</Text>
-                      </View>
-                      <Text style={styles.categoryRank}>#{index + 2}</Text>
-                    </View>
-                    <Text style={styles.categoryName}>{category.name}</Text>
-                    <Text style={styles.categoryAmount}>
-                      {SafeCurrency(category.amount)}
-                    </Text>
-                    <View style={styles.categoryProgress}>
-                      <View style={[
-                        styles.categoryProgressBar, 
-                        { 
-                          width: `${(category.amount / annualData.totalByCategory[0].amount) * 100}%`,
-                          backgroundColor: category.color 
-                        }
-                      ]} />
-                    </View>
-                    <Text style={styles.categoryPercentage}>
-                      {formatPercentage(category.amount, annualData.totalAmount)}
-                    </Text>
-                  </View>
-                ))}
-              </View>
+          {/* Gráfico de Linha - Evolução Mensal */}
+          <View style={styles.chartSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>📈 Evolução Mensal</Text>
+              <Text style={styles.sectionSubtitle}>Acompanhe seus gastos mês a mês</Text>
             </View>
-          )}
-
-          {/* Gráficos Melhorados */}
-          {annualData.totalAmount > 0 && (
-            <View style={styles.chartsContainer}>
-              {/* Gráfico de Barras */}
-              <View style={styles.chartCard}>
-                <View style={styles.chartHeader}>
-                  <View style={styles.chartIconContainer}>
-                    <Text style={styles.chartIcon}>📊</Text>
-                  </View>
-                  <View style={styles.chartHeaderText}>
-                    <Text style={styles.chartTitle}>Evolução Mensal</Text>
-                    <Text style={styles.chartSubtitle}>Gastos ao longo do ano</Text>
-                  </View>
-                </View>
-                <View style={styles.chartContainer}>
-                  <BarChart
-                    data={barChartData}
-                    width={screenWidth - 80}
+            <View style={styles.chartCard}>
+              {annualData.monthlyData && annualData.monthlyData.length > 0 && (
+                <>
+                  <LineChart
+                    data={lineChartData}
+                    width={screenWidth - 48}
                     height={220}
-                    chartConfig={chartConfig}
+                    chartConfig={{
+                      ...chartConfig,
+                      formatYLabel: (value) => {
+                        const num = parseFloat(value);
+                        if (num >= 1000000) {
+                          return `${(num / 1000000).toFixed(1).replace('.', ',')}M`;
+                        }
+                        if (num >= 1000) {
+                          return `${(num / 1000).toFixed(1).replace('.', ',')}k`;
+                        }
+                        return num.toFixed(0);
+                      },
+                      propsForDots: {
+                        r: "5",
+                        strokeWidth: "2",
+                        stroke: "#6366F1"
+                      }
+                    }}
+                    bezier
                     style={styles.chart}
-                    showValuesOnTopOfBars={false}
-                    fromZero={true}
-                    showBarTops={false}
-                    withInnerLines={true}
+                    withInnerLines={false}
+                    withOuterLines={true}
                     withHorizontalLabels={true}
                     withVerticalLabels={true}
+                    fromZero={true}
+                    segments={4}
+                    withDots={true}
+                    getDotColor={(dataPoint, dataPointIndex) => '#6366F1'}
                   />
-                </View>
-              </View>
-
-              {/* Gráfico de Pizza */}
-              <View style={styles.chartCard}>
-                <View style={styles.chartHeader}>
-                  <View style={styles.chartIconContainer}>
-                    <Text style={styles.chartIcon}>🥧</Text>
-                  </View>
-                  <View style={styles.chartHeaderText}>
-                    <Text style={styles.chartTitle}>Distribuição por Categoria</Text>
-                    <Text style={styles.chartSubtitle}>Onde você mais gasta</Text>
-                  </View>
-                </View>
-                <View style={styles.chartContainer}>
-                  {pieChartData.length > 0 ? (
-                    <PieChart
-                      data={pieChartData}
-                      width={screenWidth - 80}
-                      height={220}
-                      chartConfig={chartConfig}
-                      accessor="population"
-                      backgroundColor="transparent"
-                      paddingLeft="15"
-                      style={styles.chart}
-                      hasLegend={true}
-                      center={[10, 0]}
-                    />
-                  ) : (
-                    <View style={styles.noDataContainer}>
-                      <Text style={styles.noDataIcon}>📊</Text>
-                      <Text style={styles.noDataText}>Nenhum dado para exibir</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </View>
-          )}
-
-          {/* Resumo Final Melhorado */}
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryBackground} />
-            <View style={styles.summaryContent}>
-              <Text style={styles.summaryTitle}>Resumo Final de {selectedYear}</Text>
-              <Text style={styles.summaryAmount}>
-                {SafeCurrency(annualData.totalAmount, true)}
-              </Text>
-              <View style={styles.summaryStats}>
-                <View style={styles.summaryStat}>
-                  <Text style={styles.summaryStatValue}>
-                    {SafeValue({ value: annualData.totalByCategory.length, type: "number" })}
-                  </Text>
-                  <Text style={styles.summaryStatLabel}>categorias</Text>
-                </View>
-                <View style={styles.summaryDivider} />
-                <View style={styles.summaryStat}>
-                  <Text style={styles.summaryStatValue}>
-                    {SafeValue({ value: annualData.totalTransactions, type: "number", compact: true })}
-                  </Text>
-                  <Text style={styles.summaryStatLabel}>transações</Text>
-                </View>
-                <View style={styles.summaryDivider} />
-                <View style={styles.summaryStat}>
-                  <Text style={styles.summaryStatValue}>
-                    {SafeValue({ value: Math.round(annualData.totalTransactions / 12), type: "number" })}
-                  </Text>
-                  <Text style={styles.summaryStatLabel}>por mês</Text>
-                </View>
-              </View>
-              {annualData.totalTransactions > 0 && (
-                <Text style={styles.summaryAverage}>
-                  Média de {SafeCurrency(annualData.averagePerTransaction)} por transação
-                </Text>
+                  {/* Valores dos meses */}
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.monthlyValues}
+                    contentContainerStyle={{ paddingRight: 20 }}
+                  >
+                    {annualData.monthlyData && annualData.monthlyData.map((month, index) => (
+                      <View key={index} style={styles.monthValue}>
+                        <Text style={styles.monthValueLabel}>{month.month}</Text>
+                        <Text style={[
+                          styles.monthValueAmount,
+                          month.amount === 0 && styles.monthValueZero
+                        ]}>
+                          {formatCurrency(month.amount)}
+                        </Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </>
               )}
             </View>
           </View>
 
-          {/* Empty State Melhorado */}
-          {annualData.totalAmount === 0 && (
-            <View style={styles.emptyStateContainer}>
-              <View style={styles.emptyStateContent}>
-                <Text style={styles.emptyStateIcon}>📊</Text>
-                <Text style={styles.emptyStateTitle}>Nenhum gasto em {selectedYear}</Text>
-                <Text style={styles.emptyStateSubtitle}>
-                  Comece a registrar suas despesas para ver estatísticas incríveis aqui!
-                </Text>
-                <View style={styles.emptyStateAction}>
-                  <Text style={styles.emptyStateActionText}>
-                    Toque em "Despesas" no menu para começar
+          {/* Top Categorias */}
+          <View style={styles.categoriesSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>🏆 Top Categorias</Text>
+              <Text style={styles.sectionSubtitle}>Onde você mais gasta</Text>
+            </View>
+            <View style={styles.categoriesList}>
+              {annualData.totalByCategory && annualData.totalByCategory.slice(0, 5).map((category, index) => (
+                <CategoryCard key={index} category={category} index={index} />
+              ))}
+              {annualData.totalByCategory && annualData.totalByCategory.length > 5 && (
+                <TouchableOpacity style={styles.viewAllButton} activeOpacity={0.8}>
+                  <Text style={styles.viewAllText}>
+                    Ver todas ({annualData.totalByCategory.length} categorias)
                   </Text>
-                </View>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* Gráfico de Pizza */}
+          <View style={styles.chartSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>🥧 Distribuição por Categoria</Text>
+              <Text style={styles.sectionSubtitle}>Como seus gastos estão divididos</Text>
+            </View>
+            <View style={styles.chartCard}>
+              {pieChartData.length > 0 && (
+                <>
+                  <PieChart
+                    data={pieChartData}
+                    width={screenWidth - 48}
+                    height={200}
+                    chartConfig={{
+                      ...chartConfig,
+                      color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`
+                    }}
+                    accessor="population"
+                    backgroundColor="transparent"
+                    paddingLeft="15"
+                    hasLegend={false}
+                    center={[10, 0]}
+                  />
+                  {/* Legenda customizada com valores formatados */}
+                  <View style={styles.pieChartLegend}>
+                    {annualData.totalByCategory && annualData.totalByCategory.slice(0, 5).map((item, index) => (
+                      <View key={index} style={styles.legendItem}>
+                        <View style={[styles.legendColor, { backgroundColor: item.color }]} />
+                        <Text style={styles.legendText} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        <Text style={styles.legendPercent}>
+                          {formatPercentage(item.percentage)}
+                        </Text>
+                        <Text style={styles.legendValue}>
+                          {formatCurrency(item.amount)}
+                        </Text>
+                      </View>
+                    ))}
+                    {/* Total */}
+                    {annualData.totalByCategory && annualData.totalByCategory.length > 5 && (
+                      <View style={[styles.legendItem, styles.legendOthers]}>
+                        <View style={[styles.legendColor, { backgroundColor: '#9CA3AF' }]} />
+                        <Text style={styles.legendText}>
+                          Outras ({annualData.totalByCategory.length - 5})
+                        </Text>
+                        <Text style={styles.legendPercent}>
+                          {formatPercentage(
+                            annualData.totalByCategory.slice(5).reduce((sum, cat) => sum + cat.percentage, 0)
+                          )}
+                        </Text>
+                        <Text style={styles.legendValue}>
+                          {formatCurrency(
+                            annualData.totalByCategory.slice(5).reduce((sum, cat) => sum + cat.amount, 0)
+                          )}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={[styles.legendItem, styles.legendTotal]}>
+                      <Text style={styles.legendTotalText}>Total Geral</Text>
+                      <Text style={styles.legendTotalValue}>
+                        {formatCurrency(annualData.totalAmount)}
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+
+          {/* Insights */}
+          {annualData.biggestExpense && (
+            <View style={styles.insightCard}>
+              <View style={styles.insightHeader}>
+                <Text style={styles.insightIcon}>💡</Text>
+                <Text style={styles.insightTitle}>Insight do Ano</Text>
               </View>
+              <Text style={styles.insightText}>
+                Sua maior despesa foi "{annualData.biggestExpense.description}" 
+                no valor de {formatCurrency(annualData.biggestExpense.amount)} 
+                na categoria {annualData.biggestExpense.category || 'Sem categoria'}.
+              </Text>
+              {annualData.mostActiveMonth && annualData.mostActiveMonth.amount > 0 && (
+                <Text style={styles.insightText}>
+                  {annualData.mostActiveMonth.month} foi o mês com mais gastos, 
+                  totalizando {formatCurrency(annualData.mostActiveMonth.amount)} 
+                  em {annualData.mostActiveMonth.count} transações.
+                </Text>
+              )}
             </View>
           )}
+
+          {/* Empty State */}
+          {annualData.totalAmount === 0 && (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>📊</Text>
+              <Text style={styles.emptyTitle}>Nenhum gasto em {selectedYear}</Text>
+              <Text style={styles.emptySubtitle}>
+                Comece a registrar suas despesas para ver análises detalhadas!
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.bottomSpacer} />
         </Animated.View>
       </ScrollView>
 
-      {/* Modal Melhorado */}
+      {/* Modal de Seleção de Ano */}
       <Modal
         visible={yearModalVisible}
         transparent={true}
@@ -934,7 +747,7 @@ export default function AnnualExpenseSummary() {
               <Text style={styles.modalTitle}>Selecionar Ano</Text>
               <TouchableOpacity 
                 onPress={() => setYearModalVisible(false)}
-                style={styles.modalCloseButton}
+                style={styles.modalClose}
               >
                 <Text style={styles.modalCloseText}>✕</Text>
               </TouchableOpacity>
@@ -942,9 +755,29 @@ export default function AnnualExpenseSummary() {
             <FlatList
               data={availableYears}
               keyExtractor={(item) => item.toString()}
-              renderItem={renderYearItem}
-              style={styles.yearsList}
-              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.yearItem,
+                    selectedYear === item && styles.yearItemSelected
+                  ]}
+                  onPress={() => {
+                    setSelectedYear(item);
+                    setYearModalVisible(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.yearItemText,
+                    selectedYear === item && styles.yearItemTextSelected
+                  ]}>
+                    {item}
+                  </Text>
+                  {selectedYear === item && (
+                    <Text style={styles.yearCheckmark}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              style={styles.yearList}
             />
           </View>
         </View>
@@ -956,667 +789,427 @@ export default function AnnualExpenseSummary() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#F9FAFB',
   },
 
-  // Header Melhorado
+  // Header
   header: {
-    position: 'relative',
-    paddingTop: 50,
-    paddingBottom: 40,
-    paddingHorizontal: 20,
+    backgroundColor: '#6366F1',
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingBottom: 30,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
     overflow: 'hidden',
+    position: 'relative',
   },
-  headerBackground: {
+  headerPattern: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#10b981',
-    opacity: 0.95,
+    backgroundColor: '#5A5FC7',
+    opacity: 0.1,
   },
   headerContent: {
+    paddingHorizontal: 24,
     position: 'relative',
     zIndex: 1,
   },
   headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 24,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: '#ffffff',
-    marginBottom: 8,
-    textAlign: 'center',
-    letterSpacing: -0.5,
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
-  subtitle: {
+  yearButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  yearButtonText: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontWeight: '500',
-    textAlign: 'center',
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginRight: 6,
   },
-  yearSelector: {
-    alignSelf: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 30,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
+  yearButtonIcon: {
+    fontSize: 12,
+    color: '#FFFFFF',
   },
-  yearSelectorContent: {
+
+  // Total Container
+  totalContainer: {
+    alignItems: 'center',
+  },
+  totalLabel: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 8,
+  },
+  totalAmount: {
+    fontSize: 42,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 16,
+    textShadowColor: 'rgba(0, 0, 0, 0.1)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  totalStats: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  yearText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1f2937',
-    marginRight: 12,
-  },
-  yearArrowContainer: {
-    width: 24,
-    height: 24,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 12,
-    justifyContent: 'center',
+  totalStat: {
     alignItems: 'center',
+    paddingHorizontal: 20,
   },
-  yearArrow: {
-    fontSize: 12,
-    color: '#6b7280',
+  totalStatValue: {
+    fontSize: 18,
     fontWeight: '700',
+    color: '#FFFFFF',
   },
-  yearSelectorSkeleton: {
+  totalStatLabel: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginTop: 2,
+  },
+  totalStatDivider: {
+    width: 1,
+    height: 30,
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 30,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    alignItems: 'center',
   },
 
   // Content
   content: {
     flex: 1,
-    backgroundColor: '#f8fafc',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    marginTop: -20,
-    paddingTop: 30,
-    paddingHorizontal: 20,
   },
 
-  // Hero Card Melhorado
-  heroCard: {
-    position: 'relative',
-    borderRadius: 24,
-    padding: 28,
-    marginBottom: 32,
-    overflow: 'hidden',
-    shadowColor: '#10b981',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.3,
-    shadowRadius: 24,
-    elevation: 12,
-  },
-  heroBackground: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#10b981',
-    opacity: 0.95,
-  },
-  heroContent: {
-    position: 'relative',
-    zIndex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  heroIcon: {
-    width: 80,
-    height: 80,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 24,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  heroEmoji: {
-    fontSize: 36,
-  },
-  heroText: {
-    flex: 1,
-  },
-  heroLabel: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontWeight: '600',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  heroCategory: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#ffffff',
-    marginBottom: 8,
-  },
-  heroAmount: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: '#ffffff',
-    marginBottom: 16,
-    letterSpacing: -1.2,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  heroStats: {
-    flexDirection: 'row',
-    gap: 20,
-  },
-  heroStat: {
-    alignItems: 'center',
-  },
-  heroStatValue: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#ffffff',
-    letterSpacing: -0.3,
-  },
-  heroStatLabel: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontWeight: '500',
-  },
-
-  // Section Titles
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1f2937',
-    marginBottom: 16,
-    marginLeft: 4,
-  },
-
-  // Stats Melhoradas
-  statsContainer: {
-    marginBottom: 32,
-  },
-  statsGrid: {
+  // Metrics Grid
+  metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    gap: 16,
   },
-  statCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
+  metricCard: {
+    width: (screenWidth - 48) / 2,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     padding: 20,
-    alignItems: 'center',
-    width: '47%',
+    borderTopWidth: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.05)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 5,
   },
-  statCardPrimary: {
-    backgroundColor: '#f0fdf4',
-    borderColor: 'rgba(16, 185, 129, 0.2)',
-  },
-  statIconContainer: {
+  metricIconContainer: {
     width: 48,
     height: 48,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 16,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
   },
-  statIcon: {
+  metricIcon: {
     fontSize: 24,
   },
-  statValue: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#10b981',
-    marginBottom: 4,
-    textAlign: 'center',
-    letterSpacing: -0.3,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-    fontWeight: '600',
-    textAlign: 'center',
+  metricTitle: {
+    fontSize: 13,
+    color: '#6B7280',
     marginBottom: 8,
   },
-  statProgress: {
-    width: '100%',
-    height: 4,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 2,
-    overflow: 'hidden',
+  metricValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 4,
   },
-  statProgressBar: {
-    height: '100%',
-    backgroundColor: '#10b981',
-    borderRadius: 2,
+  metricSubtitle: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 4,
   },
 
-  // Insights Melhorados
-  insightsContainer: {
-    marginBottom: 32,
+  // Chart Section
+  chartSection: {
+    marginTop: 32,
+    paddingHorizontal: 24,
   },
-  insightCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 24,
+  sectionHeader: {
     marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  chartCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.05)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  chart: {
+    borderRadius: 8,
+  },
+  monthlyValues: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  monthValue: {
+    alignItems: 'center',
+    marginRight: 20,
+  },
+  monthValueLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  monthValueAmount: {
+    fontSize: 13,
+    color: '#1F2937',
+    fontWeight: '600',
+  },
+  monthValueZero: {
+    color: '#9CA3AF',
+  },
+  pieChartLegend: {
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 12,
+  },
+  legendColor: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    marginRight: 12,
+  },
+  legendText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  legendPercent: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '600',
+    marginRight: 12,
+  },
+  legendValue: {
+    fontSize: 14,
+    color: '#1F2937',
+    fontWeight: '700',
+  },
+  legendOthers: {
+    opacity: 0.8,
+  },
+  legendTotal: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  legendTotalText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1F2937',
+    fontWeight: '700',
+  },
+  legendTotalValue: {
+    fontSize: 16,
+    color: '#6366F1',
+    fontWeight: '800',
+  },
+
+  // Categories Section
+  categoriesSection: {
+    marginTop: 32,
+    paddingHorizontal: 24,
+  },
+  categoriesList: {
+    gap: 12,
+  },
+  categoryCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    borderLeftWidth: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  categoryContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  categoryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  categoryIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  categoryEmoji: {
+    fontSize: 24,
+  },
+  categoryInfo: {
+    flex: 1,
+  },
+  categoryName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  categoryRight: {
+    alignItems: 'flex-end',
+  },
+  categoryRank: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  categoryAmount: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  categoryStats: {
+    flexDirection: 'row',
+  },
+  categoryStatInline: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  categoryProgressBar: {
+    height: 6,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  categoryProgressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  viewAllButton: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  viewAllText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6366F1',
+  },
+
+  // Insight Card
+  insightCard: {
+    marginHorizontal: 24,
+    marginTop: 32,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 5,
   },
   insightHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
   },
-  insightIconContainer: {
-    width: 48,
-    height: 48,
-    backgroundColor: '#fef3c7',
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
   insightIcon: {
     fontSize: 24,
-  },
-  insightHeaderText: {
-    flex: 1,
+    marginRight: 12,
   },
   insightTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1f2937',
-    marginBottom: 4,
-  },
-  insightAmount: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#10b981',
-    letterSpacing: -0.5,
-  },
-  insightContent: {
-    marginLeft: 64,
-  },
-  insightDescription: {
-    fontSize: 14,
-    color: '#6b7280',
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  insightBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  insightBadgeText: {
-    fontSize: 12,
-    color: '#6b7280',
-    fontWeight: '600',
-  },
-
-  // Categories Melhoradas
-  categoriesContainer: {
-    marginBottom: 32,
-  },
-  categoriesGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  categoryCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 20,
-    alignItems: 'center',
-    flex: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.05)',
-  },
-  categoryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 12,
-  },
-  categoryIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  categoryIcon: {
-    fontSize: 20,
-    color: '#ffffff',
-  },
-  categoryRank: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#9ca3af',
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  categoryName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1f2937',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  categoryAmount: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#10b981',
-    marginBottom: 8,
-    textAlign: 'center',
-    letterSpacing: -0.3,
-  },
-  categoryProgress: {
-    width: '100%',
-    height: 4,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 2,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  categoryProgressBar: {
-    height: '100%',
-    borderRadius: 2,
-  },
-  categoryPercentage: {
-    fontSize: 12,
-    color: '#6b7280',
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-
-  // Charts Melhorados
-  chartsContainer: {
-    marginBottom: 32,
-  },
-  chartCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 28,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 24,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.05)',
-  },
-  chartHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  chartIconContainer: {
-    width: 48,
-    height: 48,
-    backgroundColor: '#f0fdf4',
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  chartIcon: {
-    fontSize: 24,
-  },
-  chartHeaderText: {
-    flex: 1,
-  },
-  chartTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1f2937',
-    marginBottom: 4,
-  },
-  chartSubtitle: {
-    fontSize: 14,
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-  chartContainer: {
-    alignItems: 'center',
-  },
-  chart: {
-    borderRadius: 16,
-  },
-  noDataContainer: {
-    height: 220,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  noDataIcon: {
-    fontSize: 48,
-    marginBottom: 12,
-    opacity: 0.6,
-  },
-  noDataText: {
-    fontSize: 16,
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-
-  // Summary Melhorado
-  summaryCard: {
-    position: 'relative',
-    borderRadius: 24,
-    padding: 32,
-    marginBottom: 32,
-    overflow: 'hidden',
-    shadowColor: '#1f2937',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.3,
-    shadowRadius: 24,
-    elevation: 12,
-  },
-  summaryBackground: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#1f2937',
-    opacity: 0.95,
-  },
-  summaryContent: {
-    position: 'relative',
-    zIndex: 1,
-    alignItems: 'center',
-  },
-  summaryTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: 16,
-    textAlign: 'center',
+    color: '#92400E',
   },
-  summaryAmount: {
-    fontSize: 36,
-    fontWeight: '900',
-    color: '#ffffff',
-    marginBottom: 20,
-    letterSpacing: -1.5,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  summaryStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  summaryStat: {
-    alignItems: 'center',
-    paddingHorizontal: 16,
-  },
-  summaryStatValue: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#ffffff',
-    letterSpacing: -0.5,
-  },
-  summaryStatLabel: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontWeight: '500',
-  },
-  summaryDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  summaryAverage: {
+  insightText: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-
-  // Empty State Melhorado
-  emptyStateContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 48,
-    marginBottom: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.05)',
-  },
-  emptyStateContent: {
-    alignItems: 'center',
-  },
-  emptyStateIcon: {
-    fontSize: 64,
-    marginBottom: 20,
-    opacity: 0.6,
-  },
-  emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1f2937',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  emptyStateSubtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 20,
-  },
-  emptyStateAction: {
-    backgroundColor: '#f0fdf4',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
-  },
-  emptyStateActionText: {
-    fontSize: 14,
-    color: '#059669',
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-
-  // Skeleton Loading
-  skeletonCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 16,
-    elevation: 4,
-  },
-  skeletonGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 16,
-  },
-  skeletonContent: {
-    flex: 1,
-  },
-  skeletonLine: {
-    height: 12,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 6,
+    color: '#92400E',
+    lineHeight: 20,
     marginBottom: 8,
   },
 
-  // Modal Melhorado
+  // Empty State
+  emptyState: {
+    alignItems: 'center',
+    padding: 48,
+    marginTop: 48,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+
+  // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    width: '85%',
-    maxHeight: '60%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.4,
-    shadowRadius: 40,
-    elevation: 20,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '70%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1624,109 +1217,67 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: '#F3F4F6',
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '800',
-    color: '#1f2937',
+    fontWeight: '700',
+    color: '#1F2937',
   },
-  modalCloseButton: {
-    width: 40,
-    height: 40,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 20,
+  modalClose: {
+    width: 32,
+    height: 32,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
   },
   modalCloseText: {
-    fontSize: 18,
-    color: '#6b7280',
-    fontWeight: '700',
+    fontSize: 16,
+    color: '#6B7280',
   },
-  yearsList: {
-    maxHeight: 300,
+  yearList: {
+    padding: 16,
   },
   yearItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f8fafc',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginBottom: 8,
   },
   yearItemSelected: {
-    backgroundColor: '#f0fdf4',
+    backgroundColor: '#EEF2FF',
   },
   yearItemText: {
     fontSize: 18,
     color: '#374151',
-    fontWeight: '600',
   },
   yearItemTextSelected: {
-    color: '#10b981',
-    fontWeight: '800',
-  },
-  yearCheckContainer: {
-    width: 24,
-    height: 24,
-    backgroundColor: '#10b981',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+    fontWeight: '700',
+    color: '#6366F1',
   },
   yearCheckmark: {
-    fontSize: 14,
-    color: '#ffffff',
+    fontSize: 18,
+    color: '#6366F1',
     fontWeight: '700',
   },
 
-  // Error State
-  errorContainer: {
+  // Others
+  bottomSpacer: {
+    height: 40,
+  },
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    padding: 40,
+    backgroundColor: '#F9FAFB',
   },
-  errorContent: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    padding: 32,
-    borderRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 24,
-    elevation: 8,
-  },
-  errorIcon: {
-    fontSize: 64,
-    marginBottom: 20,
-  },
-  errorTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1f2937',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  errorText: {
+  loadingText: {
+    marginTop: 16,
     fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
-    marginBottom: 32,
-    lineHeight: 24,
-  },
-  retryButton: {
-    backgroundColor: '#10b981',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  retryButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
+    color: '#6B7280',
   },
 });

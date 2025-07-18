@@ -68,6 +68,16 @@ export default function DatabaseInitializer({ children }) {
     `);
     console.log('✅ Tabela categories criada');
 
+    // Payment Methods (NOVA TABELA)
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS payment_methods (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        icon TEXT DEFAULT '💳'
+      );
+    `);
+    console.log('✅ Tabela payment_methods criada');
+
     // Establishments
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS establishments (
@@ -100,22 +110,38 @@ export default function DatabaseInitializer({ children }) {
     `);
     console.log('✅ Tabela locations criada');
 
-    // Expenses (PRINCIPAL - depende de categories)
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS expenses (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        description TEXT NOT NULL,
-        amount REAL NOT NULL,
-        date TEXT NOT NULL DEFAULT (datetime('now')),
-        categoryId INTEGER,
-        location_id INTEGER,
-        establishment_id INTEGER,
-        FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE SET NULL,
-        FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL,
-        FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE SET NULL
-      );
-    `);
-    console.log('✅ Tabela expenses criada');
+    // Primeiro, vamos verificar se a coluna payment_method_id já existe
+    try {
+      const tableInfo = await db.getAllAsync(`PRAGMA table_info(expenses)`);
+      const hasPaymentMethodColumn = tableInfo.some(col => col.name === 'payment_method_id');
+      
+      if (!hasPaymentMethodColumn) {
+        console.log('🔧 Adicionando coluna payment_method_id à tabela expenses...');
+        await db.execAsync(`ALTER TABLE expenses ADD COLUMN payment_method_id INTEGER REFERENCES payment_methods(id) ON DELETE SET NULL`);
+        console.log('✅ Coluna payment_method_id adicionada');
+      }
+    } catch (alterError) {
+      console.log('⚠️ Tentando criar tabela expenses do zero...');
+      
+      // Se falhar, cria a tabela do zero
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS expenses (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          description TEXT NOT NULL,
+          amount REAL NOT NULL,
+          date TEXT NOT NULL DEFAULT (datetime('now')),
+          categoryId INTEGER,
+          payment_method_id INTEGER,
+          location_id INTEGER,
+          establishment_id INTEGER,
+          FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE SET NULL,
+          FOREIGN KEY (payment_method_id) REFERENCES payment_methods(id) ON DELETE SET NULL,
+          FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL,
+          FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE SET NULL
+        );
+      `);
+      console.log('✅ Tabela expenses criada com payment_method_id');
+    }
 
     // Contacts
     await db.execAsync(`
@@ -162,6 +188,38 @@ export default function DatabaseInitializer({ children }) {
     } else {
       console.log('✅ Categorias já existem, pulando inserção');
     }
+
+    // Só insere métodos de pagamento se a tabela estiver vazia
+    const paymentMethodsCount = await db.getFirstAsync('SELECT COUNT(*) as count FROM payment_methods');
+    
+    if (paymentMethodsCount.count === 0) {
+      console.log('➕ Inserindo métodos de pagamento padrão...');
+      
+      const defaultPaymentMethods = [
+        { name: 'Dinheiro', icon: '💵' },
+        { name: 'Cartão de Crédito', icon: '💳' },
+        { name: 'Cartão de Débito', icon: '💳' },
+        { name: 'PIX', icon: '📱' },
+        { name: 'Boleto', icon: '📄' },
+        { name: 'Vale Refeição', icon: '🎫' },
+        { name: 'Vale Alimentação', icon: '🎟️' },
+        { name: 'Transferência', icon: '🏦' }
+      ];
+
+      for (const method of defaultPaymentMethods) {
+        try {
+          await db.runAsync(
+            'INSERT INTO payment_methods (name, icon) VALUES (?, ?)',
+            [method.name, method.icon]
+          );
+          console.log(`✅ Método de pagamento inserido: ${method.name}`);
+        } catch (error) {
+          console.warn(`⚠️ Erro ao inserir método ${method.name}:`, error.message);
+        }
+      }
+    } else {
+      console.log('✅ Métodos de pagamento já existem, pulando inserção');
+    }
   };
 
   const testTablesAccess = async () => {
@@ -170,6 +228,9 @@ export default function DatabaseInitializer({ children }) {
     try {
       const categoriesCount = await db.getFirstAsync('SELECT COUNT(*) as count FROM categories');
       console.log(`✅ Categories: ${categoriesCount.count} registros`);
+      
+      const paymentMethodsCount = await db.getFirstAsync('SELECT COUNT(*) as count FROM payment_methods');
+      console.log(`✅ Payment Methods: ${paymentMethodsCount.count} registros`);
       
       const expensesCount = await db.getFirstAsync('SELECT COUNT(*) as count FROM expenses');
       console.log(`✅ Expenses: ${expensesCount.count} registros`);

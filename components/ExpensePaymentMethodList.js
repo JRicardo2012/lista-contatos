@@ -11,9 +11,9 @@ import {
 import { useSQLiteContext } from "expo-sqlite";
 import { useFocusEffect } from "@react-navigation/native";
 
-export default function ExpenseEstablishmentList({ selectedEstablishment, onEstablishmentSelect }) {
+export default function ExpensePaymentMethodList({ selectedMethod, onMethodSelect }) {
   const db = useSQLiteContext();
-  const [establishments, setEstablishments] = useState([]);
+  const [paymentMethods, setPaymentMethods] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -21,8 +21,8 @@ export default function ExpenseEstablishmentList({ selectedEstablishment, onEsta
   useFocusEffect(
     React.useCallback(() => {
       if (db) {
-        console.log('🔄 Tela ficou ativa - recarregando estabelecimentos...');
-        loadEstablishments();
+        console.log('🔄 Tela ficou ativa - recarregando métodos de pagamento...');
+        loadPaymentMethods();
       }
     }, [db])
   );
@@ -30,108 +30,73 @@ export default function ExpenseEstablishmentList({ selectedEstablishment, onEsta
   // 🔄 RECARREGA TAMBÉM QUANDO O MODAL ABRE
   useEffect(() => {
     if (modalVisible && db) {
-      console.log('📝 Modal aberto - recarregando estabelecimentos...');
-      loadEstablishments();
+      console.log('📝 Modal aberto - recarregando métodos de pagamento...');
+      loadPaymentMethods();
     }
   }, [modalVisible, db]);
 
-  // ⏰ RECARREGA A CADA 5 SEGUNDOS QUANDO O MODAL ESTÁ ABERTO
-  useEffect(() => {
-    let interval;
-    if (modalVisible && db) {
-      interval = setInterval(() => {
-        console.log('⏰ Auto-refresh a cada 5s...');
-        loadEstablishments();
-      }, 5000);
-    }
-    
-    return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
-    };
-  }, [modalVisible, db]);
-
-  async function loadEstablishments() {
+  async function loadPaymentMethods() {
     try {
-      console.log('🏪 Carregando estabelecimentos...');
+      console.log('💳 Carregando métodos de pagamento...');
       const result = await db.getAllAsync(`
-        SELECT id, name, category, street, number, district, city 
-        FROM establishments 
+        SELECT id, name, icon 
+        FROM payment_methods 
         ORDER BY name ASC
       `);
-      console.log('🏪 Estabelecimentos encontrados:', result.length);
+      console.log('💳 Métodos encontrados:', result.length);
       
-      setEstablishments(result);
-      console.log('✅ Estabelecimentos carregados:', result.length);
+      // Remove duplicatas baseado no ID
+      const uniqueMethods = result.filter((method, index, self) => 
+        index === self.findIndex(m => m.id === method.id)
+      );
+      
+      setPaymentMethods(uniqueMethods);
+      console.log('✅ Métodos únicos:', uniqueMethods.length);
     } catch (err) {
-      console.error("❌ Erro ao carregar estabelecimentos:", err);
+      console.error("❌ Erro ao carregar métodos de pagamento:", err);
     } finally {
       setLoading(false);
     }
   }
 
-  const getSelectedEstablishmentData = () => {
-    return establishments.find(est => est.id === selectedEstablishment);
+  const getSelectedMethodData = () => {
+    return paymentMethods.find(method => method.id === selectedMethod);
   };
 
-  const handleSelectEstablishment = (establishmentId) => {
-    console.log('🏪 Estabelecimento selecionado:', establishmentId);
-    onEstablishmentSelect(establishmentId);
+  const handleSelectMethod = (methodId) => {
+    console.log('💳 Método de pagamento selecionado:', methodId);
+    onMethodSelect(methodId);
     setModalVisible(false);
   };
 
   const handleClearSelection = () => {
-    console.log('🧹 Limpando seleção de estabelecimento');
-    onEstablishmentSelect(null);
+    console.log('🧹 Limpando seleção de método de pagamento');
+    onMethodSelect(null);
   };
 
   // 🔄 FUNÇÃO MANUAL DE REFRESH
   const handleManualRefresh = () => {
     console.log('🔄 Refresh manual solicitado...');
     setLoading(true);
-    loadEstablishments();
+    loadPaymentMethods();
   };
 
-  const formatAddress = (establishment) => {
-    const parts = [];
-    if (establishment.street) {
-      if (establishment.number) {
-        parts.push(`${establishment.street}, ${establishment.number}`);
-      } else {
-        parts.push(establishment.street);
-      }
-    }
-    if (establishment.district) parts.push(establishment.district);
-    if (establishment.city) parts.push(establishment.city);
-    
-    return parts.join(' - ') || 'Endereço não informado';
-  };
-
-  const renderEstablishment = ({ item }) => {
-    const isSelected = selectedEstablishment === item.id;
+  const renderMethod = ({ item }) => {
+    const isSelected = selectedMethod === item.id;
     
     return (
       <TouchableOpacity
-        style={[styles.establishmentItem, isSelected && styles.establishmentSelected]}
-        onPress={() => handleSelectEstablishment(item.id)}
+        style={[styles.methodItem, isSelected && styles.methodSelected]}
+        onPress={() => handleSelectMethod(item.id)}
         activeOpacity={0.7}
       >
-        <View style={styles.establishmentContent}>
+        <View style={styles.methodContent}>
           <View style={[styles.iconContainer, isSelected && styles.iconContainerSelected]}>
-            <Text style={styles.establishmentIcon}>🏪</Text>
+            <Text style={styles.methodIcon}>{item.icon || '💳'}</Text>
           </View>
-          <View style={styles.establishmentTextContainer}>
-            <Text style={[styles.establishmentName, isSelected && styles.establishmentNameSelected]}>
+          <View style={styles.methodTextContainer}>
+            <Text style={[styles.methodName, isSelected && styles.methodNameSelected]}>
               {item.name}
-            </Text>
-            {item.category && (
-              <Text style={styles.establishmentCategory}>
-                📂 {item.category}
-              </Text>
-            )}
-            <Text style={styles.establishmentAddress} numberOfLines={2}>
-              📍 {formatAddress(item)}
             </Text>
           </View>
         </View>
@@ -148,17 +113,17 @@ export default function ExpenseEstablishmentList({ selectedEstablishment, onEsta
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="small" color="#10b981" />
-        <Text style={styles.loadingText}>Carregando estabelecimentos...</Text>
+        <Text style={styles.loadingText}>Carregando formas de pagamento...</Text>
       </View>
     );
   }
 
-  if (establishments.length === 0) {
+  if (paymentMethods.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyIcon}>🏪</Text>
-        <Text style={styles.emptyTitle}>Nenhum estabelecimento encontrado</Text>
-        <Text style={styles.emptySubtitle}>Vá em "Estabelecimentos" para criar alguns</Text>
+        <Text style={styles.emptyIcon}>💳</Text>
+        <Text style={styles.emptyTitle}>Nenhuma forma de pagamento</Text>
+        <Text style={styles.emptySubtitle}>Vá em "Formas de Pagamento" para criar algumas</Text>
         <TouchableOpacity style={styles.refreshButton} onPress={handleManualRefresh}>
           <Text style={styles.refreshButtonText}>🔄 Atualizar Lista</Text>
         </TouchableOpacity>
@@ -166,7 +131,7 @@ export default function ExpenseEstablishmentList({ selectedEstablishment, onEsta
     );
   }
 
-  const selectedEstablishmentData = getSelectedEstablishmentData();
+  const selectedMethodData = getSelectedMethodData();
 
   return (
     <View style={styles.container}>
@@ -174,7 +139,7 @@ export default function ExpenseEstablishmentList({ selectedEstablishment, onEsta
       <TouchableOpacity
         style={[
           styles.selector,
-          selectedEstablishment && styles.selectorSelected
+          selectedMethod && styles.selectorSelected
         ]}
         onPress={() => setModalVisible(true)}
         activeOpacity={0.8}
@@ -182,29 +147,23 @@ export default function ExpenseEstablishmentList({ selectedEstablishment, onEsta
         <View style={styles.selectorContent}>
           <View style={[
             styles.selectorIconContainer,
-            selectedEstablishment && styles.selectorIconContainerSelected
+            selectedMethod && styles.selectorIconContainerSelected
           ]}>
-            <Text style={styles.selectorIcon}>🏪</Text>
+            <Text style={styles.selectorIcon}>
+              {selectedMethodData ? selectedMethodData.icon : '💳'}
+            </Text>
           </View>
           
           <View style={styles.selectorTextContainer}>
-            {selectedEstablishmentData ? (
-              <View>
-                <Text style={styles.selectorTextSelected}>
-                  {selectedEstablishmentData.name}
-                </Text>
-                <Text style={styles.selectorSubtext} numberOfLines={1}>
-                  {formatAddress(selectedEstablishmentData)}
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.selectorTextPlaceholder}>
-                Estabelecimento (opcional)
-              </Text>
-            )}
+            <Text style={[
+              styles.selectorText,
+              selectedMethod ? styles.selectorTextSelected : styles.selectorTextPlaceholder
+            ]}>
+              {selectedMethodData ? selectedMethodData.name : 'Forma de pagamento (opcional)'}
+            </Text>
           </View>
 
-          {selectedEstablishment && (
+          {selectedMethod && (
             <TouchableOpacity 
               style={styles.clearButton} 
               onPress={handleClearSelection}
@@ -220,7 +179,7 @@ export default function ExpenseEstablishmentList({ selectedEstablishment, onEsta
         </View>
       </TouchableOpacity>
 
-      {/* Modal com Lista de Estabelecimentos */}
+      {/* Modal com Lista */}
       <Modal
         visible={modalVisible}
         transparent={true}
@@ -232,8 +191,8 @@ export default function ExpenseEstablishmentList({ selectedEstablishment, onEsta
             {/* Header do Modal com Botão de Refresh */}
             <View style={styles.modalHeader}>
               <View style={styles.modalTitleContainer}>
-                <Text style={styles.modalIcon}>🏪</Text>
-                <Text style={styles.modalTitle}>Escolha um estabelecimento</Text>
+                <Text style={styles.modalIcon}>💳</Text>
+                <Text style={styles.modalTitle}>Escolha a forma de pagamento</Text>
               </View>
               <View style={styles.headerButtons}>
                 <TouchableOpacity 
@@ -259,12 +218,12 @@ export default function ExpenseEstablishmentList({ selectedEstablishment, onEsta
               </View>
             )}
             
-            {/* Lista de Estabelecimentos */}
+            {/* Lista de Métodos */}
             <FlatList
-              data={establishments}
-              keyExtractor={(item) => `establishment-${item.id}`}
-              renderItem={renderEstablishment}
-              style={styles.establishmentList}
+              data={paymentMethods}
+              keyExtractor={(item) => `payment-method-${item.id}`}
+              renderItem={renderMethod}
+              style={styles.methodList}
               showsVerticalScrollIndicator={false}
               ItemSeparatorComponent={() => <View style={styles.separator} />}
             />
@@ -303,9 +262,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   selectorSelected: {
-    borderColor: '#3b82f6',
-    backgroundColor: '#eff6ff',
-    shadowColor: '#3b82f6',
+    borderColor: '#8b5cf6',
+    backgroundColor: '#f5f3ff',
+    shadowColor: '#8b5cf6',
     shadowOpacity: 0.2,
   },
   selectorContent: {
@@ -325,7 +284,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   selectorIconContainerSelected: {
-    backgroundColor: '#dbeafe',
+    backgroundColor: '#ede9fe',
   },
   selectorIcon: {
     fontSize: 20,
@@ -333,20 +292,15 @@ const styles = StyleSheet.create({
   selectorTextContainer: {
     flex: 1,
   },
-  selectorTextSelected: {
+  selectorText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1e40af',
-    marginBottom: 2,
-  },
-  selectorSubtext: {
-    fontSize: 12,
-    color: '#64748b',
     fontWeight: '500',
+  },
+  selectorTextSelected: {
+    color: '#6d28d9',
+    fontWeight: '600',
   },
   selectorTextPlaceholder: {
-    fontSize: 16,
-    fontWeight: '500',
     color: '#9ca3af',
   },
   clearButton: {
@@ -462,12 +416,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // ========== LISTA DE ESTABELECIMENTOS ==========
-  establishmentList: {
+  // ========== LISTA DE MÉTODOS ==========
+  methodList: {
     maxHeight: 400,
     paddingHorizontal: 20,
   },
-  establishmentItem: {
+  methodItem: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
     paddingVertical: 16,
@@ -481,14 +435,14 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  establishmentSelected: {
-    backgroundColor: '#eff6ff',
+  methodSelected: {
+    backgroundColor: '#f5f3ff',
     borderWidth: 2,
-    borderColor: '#3b82f6',
-    shadowColor: '#3b82f6',
+    borderColor: '#8b5cf6',
+    shadowColor: '#8b5cf6',
     shadowOpacity: 0.2,
   },
-  establishmentContent: {
+  methodContent: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
@@ -503,38 +457,27 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   iconContainerSelected: {
-    backgroundColor: '#dbeafe',
+    backgroundColor: '#ede9fe',
   },
-  establishmentIcon: {
+  methodIcon: {
     fontSize: 20,
   },
-  establishmentTextContainer: {
+  methodTextContainer: {
     flex: 1,
   },
-  establishmentName: {
+  methodName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 4,
   },
-  establishmentNameSelected: {
-    color: '#1e40af',
+  methodNameSelected: {
+    color: '#6d28d9',
     fontWeight: '700',
-  },
-  establishmentCategory: {
-    fontSize: 13,
-    color: '#6b7280',
-    marginBottom: 2,
-  },
-  establishmentAddress: {
-    fontSize: 12,
-    color: '#9ca3af',
-    lineHeight: 16,
   },
   checkContainer: {
     width: 28,
     height: 28,
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#8b5cf6',
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',

@@ -21,6 +21,7 @@ export const useDatabaseSafety = () => {
       
       // Testa se consegue acessar as tabelas principais
       await db.getFirstAsync('SELECT COUNT(*) as count FROM categories');
+      await db.getFirstAsync('SELECT COUNT(*) as count FROM payment_methods');
       await db.getFirstAsync('SELECT COUNT(*) as count FROM expenses');
       await db.getFirstAsync('SELECT COUNT(*) as count FROM establishments');
       

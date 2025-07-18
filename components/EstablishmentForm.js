@@ -162,114 +162,198 @@ export default function EstablishmentForm({ establishment, onSaved }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Nome do Estabelecimento *</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Ex: Restaurante Central"
-        value={name}
-        onChangeText={setName}
-      />
-
-      <Text style={styles.label}>Categoria</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Ex: Restaurante, Farmácia"
-        value={category}
-        onChangeText={setCategory}
-      />
-
-      {/* Campos de Endereço Separados */}
-      <Text style={styles.sectionTitle}>📍 Endereço</Text>
-      
-      <View style={styles.addressRow}>
-        <View style={styles.streetContainer}>
-          <Text style={styles.label}>Rua/Avenida</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Nome da rua"
-            value={street}
-            onChangeText={setStreet}
-          />
+      <ScrollView 
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>
+            {establishment?.id ? "✏️ Editar Estabelecimento" : "🏪 Novo Estabelecimento"}
+          </Text>
+          <Text style={styles.headerSubtitle}>
+            Preencha as informações do local
+          </Text>
         </View>
-        <View style={styles.numberContainer}>
-          <Text style={styles.label}>Número</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="123"
-            value={number}
-            onChangeText={setNumber}
-          />
+
+        {/* Card 1: Informações Básicas */}
+        <View style={styles.card}>
+          <View style={styles.fieldGroup}>
+            <View style={styles.field}>
+              <Text style={styles.label}>📝 Nome do Estabelecimento *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ex: Restaurante Central, Farmácia São João"
+                value={name}
+                onChangeText={setName}
+                maxLength={100}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>📂 Categoria</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ex: Restaurante, Farmácia, Supermercado"
+                value={category}
+                onChangeText={setCategory}
+                maxLength={50}
+              />
+            </View>
+          </View>
         </View>
+
+        {/* Card 2: Endereço */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardIcon}>📍</Text>
+            <Text style={styles.cardTitle}>Endereço</Text>
+            <TouchableOpacity 
+              style={[styles.gpsButton, gettingLocation && styles.gpsButtonDisabled]}
+              onPress={getCurrentLocation}
+              disabled={gettingLocation}
+            >
+              {gettingLocation ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.gpsButtonIcon}>📍</Text>
+              )}
+              <Text style={styles.gpsButtonText}>
+                {gettingLocation ? "Obtendo..." : "GPS"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.fieldGroup}>
+            {/* Rua e Número */}
+            <View style={styles.addressRow}>
+              <View style={styles.streetField}>
+                <Text style={styles.label}>🛣️ Rua/Avenida</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Nome da rua"
+                  value={street}
+                  onChangeText={setStreet}
+                />
+              </View>
+              <View style={styles.numberField}>
+                <Text style={styles.label}>🔢 Número</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="123"
+                  value={number}
+                  onChangeText={setNumber}
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+
+            {/* Bairro */}
+            <View style={styles.field}>
+              <Text style={styles.label}>🏘️ Bairro</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Nome do bairro"
+                value={district}
+                onChangeText={setDistrict}
+              />
+            </View>
+
+            {/* Cidade e Estado */}
+            <View style={styles.cityRow}>
+              <View style={styles.cityField}>
+                <Text style={styles.label}>🏙️ Cidade</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Cidade"
+                  value={city}
+                  onChangeText={setCity}
+                />
+              </View>
+              <View style={styles.stateField}>
+                <Text style={styles.label}>🗺️ Estado</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="São Paulo"
+                  value={state}
+                  onChangeText={setState}
+                  maxLength={20}
+                />
+              </View>
+            </View>
+
+            {/* CEP */}
+            <View style={styles.field}>
+              <Text style={styles.label}>📮 CEP</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="00000-000"
+                value={zipcode}
+                onChangeText={setZipcode}
+                keyboardType="numeric"
+                maxLength={9}
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* Card 3: Contato */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardIcon}>📞</Text>
+            <Text style={styles.cardTitle}>Contato</Text>
+          </View>
+          
+          <View style={styles.fieldGroup}>
+            <View style={styles.field}>
+              <Text style={styles.label}>📱 Telefone</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="(00) 00000-0000"
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+                maxLength={15}
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* Status da Localização */}
+        {latitude && longitude && (
+          <View style={styles.locationStatus}>
+            <Text style={styles.locationIcon}>🌐</Text>
+            <Text style={styles.locationText}>
+              Localização GPS capturada com sucesso!
+            </Text>
+          </View>
+        )}
+
+        {/* Espaço para o botão não ficar grudado nos controles do celular */}
+        <View style={styles.bottomSpacer} />
+      </ScrollView>
+
+      {/* Botão Fixo na Parte Inferior */}
+      <View style={styles.bottomContainer}>
         <TouchableOpacity 
-          style={[styles.gpsButton, gettingLocation && styles.gpsButtonDisabled]}
-          onPress={getCurrentLocation}
-          disabled={gettingLocation}
+          style={[styles.saveButton, saving && styles.saveButtonDisabled]} 
+          onPress={handleSave} 
+          disabled={saving || !name.trim()}
         >
-          {gettingLocation ? (
-            <ActivityIndicator size="small" color="#fff" />
+          {saving ? (
+            <View style={styles.savingContainer}>
+              <ActivityIndicator size="small" color="#ffffff" />
+              <Text style={styles.saveButtonText}>Salvando...</Text>
+            </View>
           ) : (
-            <Text style={styles.gpsButtonText}>📍</Text>
+            <Text style={styles.saveButtonText}>
+              {establishment?.id ? "💾 Atualizar Estabelecimento" : "💾 Salvar Estabelecimento"}
+            </Text>
           )}
         </TouchableOpacity>
       </View>
-
-      <Text style={styles.label}>Bairro</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Nome do bairro"
-        value={district}
-        onChangeText={setDistrict}
-      />
-
-      <View style={styles.cityRow}>
-        <View style={styles.cityContainer}>
-          <Text style={styles.label}>Cidade</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Cidade"
-            value={city}
-            onChangeText={setCity}
-          />
-        </View>
-        <View style={styles.stateContainer}>
-          <Text style={styles.label}>Estado</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="São Paulo"
-            value={state}
-            onChangeText={setState}
-            maxLength={20}
-          />
-        </View>
-      </View>
-
-      <Text style={styles.label}>CEP</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="00000-000"
-        value={zipcode}
-        onChangeText={setZipcode}
-        keyboardType="numeric"
-      />
-
-      <Text style={styles.label}>Telefone</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="(00) 00000-0000"
-        value={phone}
-        onChangeText={setPhone}
-        keyboardType="phone-pad"
-      />
-
-      <TouchableOpacity 
-        style={[styles.saveButton, saving && styles.saveButtonDisabled]} 
-        onPress={handleSave} 
-        disabled={saving}
-      >
-        <Text style={styles.saveButtonText}>
-          {saving ? "Salvando..." : "Salvar"}
-        </Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -277,84 +361,218 @@ export default function EstablishmentForm({ establishment, onSaved }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    backgroundColor: '#fff',
+    backgroundColor: '#f8fafc',
   },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 5,
-    marginTop: 10,
-    color: '#374151',
+  
+  // ScrollView
+  scrollContainer: {
+    flex: 1,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    padding: 12,
-    borderRadius: 8,
-    fontSize: 16,
-    backgroundColor: '#f9fafb',
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 100, // Espaço para o botão fixo
   },
-  sectionTitle: {
-    fontSize: 18,
+
+  // Header
+  header: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  headerTitle: {
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#1f2937',
-    marginTop: 20,
-    marginBottom: 10,
+    marginBottom: 4,
+    textAlign: 'center',
   },
-  addressRow: {
+  headerSubtitle: {
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+
+  // Cards
+  card: {
+    backgroundColor: '#ffffff',
+    borderRadius: 6,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.08)',
+  },
+  
+  cardHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    marginBottom: 10,
-  },
-  streetContainer: {
-    flex: 2,
-    marginRight: 8,
-  },
-  numberContainer: {
-    flex: 1,
-    marginRight: 8,
-  },
-  cityRow: {
-    flexDirection: 'row',
-    marginBottom: 10,
-  },
-  cityContainer: {
-    flex: 1.5,
-    marginRight: 8,
-  },
-  stateContainer: {
-    flex: 1,
-  },
-  gpsButton: {
-    width: 40,
-    height: 40,
-    backgroundColor: '#0284c7',
-    borderRadius: 20,
-    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 2,
+    marginBottom: 20,
+    justifyContent: 'space-between',
+  },
+  
+  cardIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1f2937',
+    flex: 1,
+  },
+
+  // GPS Button no Header do Card
+  gpsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10b981',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
   },
   gpsButtonDisabled: {
     backgroundColor: '#94a3b8',
   },
-  gpsButtonText: {
-    fontSize: 16,
+  gpsButtonIcon: {
+    fontSize: 14,
+    marginRight: 4,
   },
-  saveButton: {
-    backgroundColor: "#10b981",
+  gpsButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Fields
+  fieldGroup: {
+    gap: 16,
+  },
+  
+  field: {
+    marginBottom: 0,
+  },
+  
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  
+  input: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#1f2937',
+    fontWeight: '500',
+  },
+
+  // Address Rows
+  addressRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  streetField: {
+    flex: 2,
+  },
+  numberField: {
+    flex: 1,
+  },
+
+  cityRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  cityField: {
+    flex: 1.5,
+  },
+  stateField: {
+    flex: 1,
+  },
+
+  // Location Status
+  locationStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#dcfce7',
     padding: 16,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 20,
-    marginBottom: 40,
+    borderRadius: 6,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  locationIcon: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+  locationText: {
+    fontSize: 14,
+    color: '#166534',
+    fontWeight: '600',
+    flex: 1,
+  },
+
+  // Bottom Spacer
+  bottomSpacer: {
+    height: 20,
+  },
+
+  // Bottom Container (Botão Fixo)
+  bottomContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#ffffff',
+    padding: 20,
+    paddingBottom: 34, // Espaço extra para não interferir com controles do celular
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+
+  // Save Button
+  saveButton: {
+    backgroundColor: '#10b981',
+    borderRadius: 6,
+    paddingVertical: 16,
+    alignItems: 'center',
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   saveButtonDisabled: {
-    backgroundColor: "#9ca3af",
+    backgroundColor: '#9ca3af',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   saveButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
+    color: '#ffffff',
     fontSize: 16,
+    fontWeight: 'bold',
+  },
+  savingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
 });

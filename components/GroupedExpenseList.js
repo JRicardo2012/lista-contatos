@@ -135,9 +135,12 @@ const GroupedExpenseList = () => {
           CAST(e.amount AS REAL) AS value, 
           e.date, 
           COALESCE(c.name, 'Sem categoria') as category, 
-          COALESCE(c.icon, '📦') as icon
+          COALESCE(c.icon, '📦') as icon,
+          COALESCE(pm.name, '') as payment_method,
+          COALESCE(pm.icon, '') as payment_icon
         FROM expenses e
         LEFT JOIN categories c ON e.categoryId = c.id
+        LEFT JOIN payment_methods pm ON e.payment_method_id = pm.id
         WHERE date(e.date) >= date('now', '-7 days')
         ORDER BY e.date DESC
       `);
@@ -205,7 +208,9 @@ const GroupedExpenseList = () => {
               value: value,
               date: item.date,
               category: item.category,
-              icon: item.icon
+              icon: item.icon,
+              payment_method: item.payment_method,
+              payment_icon: item.payment_icon
             };
             
             grouped[dateKey].expenses.push(expense);
@@ -412,6 +417,7 @@ const GroupedExpenseList = () => {
               </Text>
               <Text style={styles.expenseCategory}>
                 📂 {item.category}
+                {item.payment_method && ` • ${item.payment_icon || '💳'} ${item.payment_method}`}
               </Text>
             </View>
             <Text style={styles.expenseAmount}>
@@ -887,6 +893,7 @@ const styles = StyleSheet.create({
   expenseCategory: {
     fontSize: 10,
     color: '#6b7280',
+    flexWrap: 'wrap',
   },
   expenseAmount: {
     fontSize: 14,
