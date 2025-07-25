@@ -1,3 +1,4 @@
+// components/ExpenseList.js - VERSÃO CORRIGIDA
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -14,36 +15,95 @@ export default function ExpenseList({ onEdit = () => {} }) {
   const db = useSQLiteContext();
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (db) {
+      console.log('🔄 ExpenseList: Banco disponível, carregando despesas...');
       loadExpenses();
+    } else {
+      console.log('⚠️ ExpenseList: Banco não disponível ainda');
     }
   }, [db]);
 
   async function loadExpenses() {
     try {
-      console.log('📋 Carregando despesas...');
-      const result = await db.getAllAsync(`
-        SELECT
-          e.id,
-          e.description,
-          e.amount,
-          e.date,
-          c.name AS category,
-          c.icon AS icon,
-          pm.name AS payment_method,
-          pm.icon AS payment_icon
-        FROM expenses e
-        LEFT JOIN categories c ON e.categoryId = c.id
-        LEFT JOIN payment_methods pm ON e.payment_method_id = pm.id
-        ORDER BY e.date DESC
-        LIMIT 50
+      console.log('📋 Iniciando carregamento de despesas...');
+      setError(null);
+      
+      // Query simplificada primeiro para debug
+      const simpleTest = await db.getAllAsync(`
+        SELECT COUNT(*) as total FROM expenses
       `);
-      console.log('📋 Despesas carregadas:', result.length);
-      setExpenses(result);
+      console.log('📊 Total de despesas no banco:', simpleTest[0]?.total || 0);
+
+      // Se não há despesas, mostra mensagem apropriada
+      if (simpleTest[0]?.total === 0) {
+        console.log('📭 Nenhuma despesa encontrada no banco');
+        setExpenses([]);
+        setLoading(false);
+        return;
+      }
+
+      // Query completa com tratamento de erro
+      try {
+        const result = await db.getAllAsync(`
+          SELECT
+            e.id,
+            e.description,
+            e.amount,
+            e.date,
+            e.categoryId,
+            e.payment_method_id,
+            e.establishment_id,
+            COALESCE(c.name, 'Sem categoria') AS category,
+            COALESCE(c.icon, '📦') AS icon,
+            COALESCE(pm.name, '') AS payment_method,
+            COALESCE(pm.icon, '') AS payment_icon
+          FROM expenses e
+          LEFT JOIN categories c ON e.categoryId = c.id
+          LEFT JOIN payment_methods pm ON e.payment_method_id = pm.id
+          ORDER BY e.date DESC, e.id DESC
+          LIMIT 100
+        `);
+
+        console.log('✅ Despesas carregadas com sucesso:', result.length);
+        console.log('🔍 Primeira despesa:', result[0]);
+        
+        setExpenses(result);
+      } catch (queryError) {
+        console.error('❌ Erro na query completa, tentando query simplificada:', queryError);
+        
+        // Fallback para query mais simples
+        const simpleResult = await db.getAllAsync(`
+          SELECT
+            e.id,
+            e.description,
+            e.amount,
+            e.date,
+            COALESCE(c.name, 'Sem categoria') AS category,
+            COALESCE(c.icon, '📦') AS icon
+          FROM expenses e
+          LEFT JOIN categories c ON e.categoryId = c.id
+          ORDER BY e.date DESC, e.id DESC
+          LIMIT 100
+        `);
+        
+        console.log('✅ Despesas carregadas (modo simples):', simpleResult.length);
+        setExpenses(simpleResult);
+      }
+      
     } catch (error) {
-      console.error("❌ Erro ao carregar despesas:", error);
+      console.error("❌ Erro geral ao carregar despesas:", error);
+      setError(error.message);
+      
+      // Tenta mostrar estrutura da tabela para debug
+      try {
+        const tableInfo = await db.getAllAsync(`PRAGMA table_info(expenses)`);
+        console.log('🏗️ Estrutura da tabela expenses:', tableInfo);
+      } catch (e) {
+        console.error('❌ Erro ao obter estrutura da tabela:', e);
+      }
     } finally {
       setLoading(false);
     }
@@ -61,10 +121,11 @@ export default function ExpenseList({ onEdit = () => {} }) {
           onPress: async () => {
             try {
               await db.runAsync("DELETE FROM expenses WHERE id = ?", [id]);
+              console.log('✅ Despesa excluída:', id);
               await loadExpenses();
               Alert.alert("Sucesso", "Despesa excluída!");
             } catch (error) {
-              console.error("Erro ao excluir:", error);
+              console.error("❌ Erro ao excluir:", error);
               Alert.alert("Erro", "Não foi possível excluir a despesa.");
             }
           },
@@ -87,17 +148,21 @@ export default function ExpenseList({ onEdit = () => {} }) {
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
       
-      if (date.toDateString() === today.toDateString()) {
+      // Ajusta para o fuso horário local
+      const localDate = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
+      
+      if (localDate.toDateString() === today.toDateString()) {
         return 'Hoje';
-      } else if (date.toDateString() === yesterday.toDateString()) {
+      } else if (localDate.toDateString() === yesterday.toDateString()) {
         return 'Ontem';
       } else {
-        return date.toLocaleDateString('pt-BR', {
+        return localDate.toLocaleDateString('pt-BR', {
           day: '2-digit',
           month: '2-digit',
         });
       }
     } catch (error) {
+      console.error('Erro ao formatar data:', error, dateString);
       return dateString;
     }
   }
@@ -109,7 +174,10 @@ export default function ExpenseList({ onEdit = () => {} }) {
     ]}>
       <TouchableOpacity 
         style={styles.expenseContent}
-        onPress={() => onEdit(item)}
+        onPress={() => {
+          console.log('📝 Editando despesa:', item);
+          onEdit(item);
+        }}
         activeOpacity={0.8}
       >
         {/* Ícone da categoria */}
@@ -121,7 +189,7 @@ export default function ExpenseList({ onEdit = () => {} }) {
         <View style={styles.expenseInfo}>
           <View style={styles.expenseHeader}>
             <Text style={styles.expenseDescription} numberOfLines={1}>
-              {item.description}
+              {item.description || 'Sem descrição'}
             </Text>
             <Text style={styles.expenseAmount}>
               {formatCurrency(item.amount)}
@@ -153,11 +221,25 @@ export default function ExpenseList({ onEdit = () => {} }) {
     </View>
   );
 
+  // Estados de carregamento e erro
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#10b981" />
         <Text style={styles.loadingText}>Carregando despesas...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorIcon}>⚠️</Text>
+        <Text style={styles.errorTitle}>Erro ao carregar despesas</Text>
+        <Text style={styles.errorMessage}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={loadExpenses}>
+          <Text style={styles.retryButtonText}>Tentar Novamente</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -170,6 +252,9 @@ export default function ExpenseList({ onEdit = () => {} }) {
         <Text style={styles.emptySubtitle}>
           Suas despesas aparecerão aqui quando você começar a cadastrar!
         </Text>
+        <TouchableOpacity style={styles.refreshButton} onPress={loadExpenses}>
+          <Text style={styles.refreshButtonText}>🔄 Atualizar</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -190,6 +275,8 @@ export default function ExpenseList({ onEdit = () => {} }) {
         renderItem={renderExpenseItem}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        onEndReachedThreshold={0.1}
+        ListFooterComponent={<View style={styles.listFooter} />}
       />
     </View>
   );
@@ -225,9 +312,12 @@ const styles = StyleSheet.create({
     color: '#64748b',
   },
 
-  // Lista compacta
+  // Lista
   list: {
     padding: 16,
+  },
+  listFooter: {
+    height: 80, // Espaço para o botão flutuante
   },
   expenseCard: {
     backgroundColor: '#ffffff',
@@ -243,7 +333,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#f1f5f9',
-    minHeight: 72, // Altura um pouco maior que categorias para 2 linhas
+    minHeight: 72,
   },
   expenseContent: {
     flex: 1,
@@ -351,6 +441,7 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     textAlign: 'center',
     lineHeight: 24,
+    marginBottom: 20,
   },
 
   // Loading
@@ -364,5 +455,51 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
     color: '#6b7280',
+  },
+
+  // Error State
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  errorIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ef4444',
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#10b981',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  refreshButton: {
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  refreshButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

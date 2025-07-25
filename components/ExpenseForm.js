@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Modal,
+  FlatList,
   Platform
 } from "react-native";
 import { useSQLiteContext } from "expo-sqlite";
@@ -28,29 +29,15 @@ export default function ExpenseForm({ expense, onSaved }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
+  const [modalVisible, setModalVisible] = useState(false);
+  const [expenses, setExpenses] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  console.log("🔍 ExpenseForm renderizando com categoria, estabelecimento, pagamento e data...");
-
-  function handleCategorySelect(categoryId) {
-    setSelectedCategory(categoryId);
-    console.log("Categoria selecionada:", categoryId);
-  }
-
-  function handleEstablishmentSelect(establishmentId) {
-    setSelectedEstablishment(establishmentId);
-    console.log("Estabelecimento selecionado:", establishmentId);
-  }
-
-  function handlePaymentMethodSelect(paymentMethodId) {
-    setSelectedPaymentMethod(paymentMethodId);
-    console.log("Forma de pagamento selecionada:", paymentMethodId);
-  }
-
-  function handleDateSelect(date) {
-    setSelectedDate(date);
-    setShowDatePicker(false);
-    console.log("Data selecionada:", date);
-  }
+  useEffect(() => {
+    if (db) {
+      loadRecentExpenses();
+    }
+  }, [db]);
 
   useEffect(() => {
     const newErrors = {};
@@ -68,9 +55,57 @@ export default function ExpenseForm({ expense, onSaved }) {
     setErrors(newErrors);
   }, [description, amount]);
 
-  // Função para notificar outras telas sobre mudanças
+  async function loadRecentExpenses() {
+    try {
+      const result = await db.getAllAsync(`
+        SELECT 
+          e.id,
+          e.description,
+          CAST(e.amount AS REAL) as amount,
+          e.date,
+          COALESCE(c.name, 'Sem categoria') as category,
+          COALESCE(c.icon, '📦') as icon
+        FROM expenses e
+        LEFT JOIN categories c ON e.categoryId = c.id
+        ORDER BY e.date DESC
+        LIMIT 5
+      `);
+      setExpenses(result);
+    } catch (error) {
+      console.error('Erro ao carregar despesas:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const openNewExpenseModal = () => {
+    setAmount("");
+    setDescription("");
+    setSelectedCategory(null);
+    setSelectedEstablishment(null);
+    setSelectedPaymentMethod(null);
+    setSelectedDate(new Date());
+    setModalVisible(true);
+  };
+
+  function handleCategorySelect(categoryId) {
+    setSelectedCategory(categoryId);
+  }
+
+  function handleEstablishmentSelect(establishmentId) {
+    setSelectedEstablishment(establishmentId);
+  }
+
+  function handlePaymentMethodSelect(paymentMethodId) {
+    setSelectedPaymentMethod(paymentMethodId);
+  }
+
+  function handleDateSelect(date) {
+    setSelectedDate(date);
+    setShowDatePicker(false);
+  }
+
   function notifyExpenseChange() {
-    // Dispara evento global para atualizar outras telas
     if (global.expenseListeners) {
       global.expenseListeners.forEach(callback => {
         if (typeof callback === 'function') {
@@ -81,15 +116,6 @@ export default function ExpenseForm({ expense, onSaved }) {
   }
 
   async function handleSave() {
-    console.log('🔧 Salvando despesa...', { 
-      description, 
-      amount, 
-      selectedCategory, 
-      selectedEstablishment,
-      selectedPaymentMethod,
-      selectedDate: selectedDate.toISOString()
-    });
-    
     const descError = validators.description(description);
     const amountError = validators.amount(amount);
     
@@ -113,48 +139,25 @@ export default function ExpenseForm({ expense, onSaved }) {
       const valor = parseFloat(cleanAmount.replace(',', '.'));
       const dateISO = selectedDate.toISOString();
 
-      console.log('💾 Dados limpos:', { 
-        cleanDescription, 
-        valor, 
-        selectedCategory, 
-        selectedEstablishment,
-        selectedPaymentMethod,
-        dateISO
-      });
-
       if (expense?.id) {
-        // Atualização
         await db.runAsync(
           `UPDATE expenses 
            SET amount = ?, description = ?, categoryId = ?, establishment_id = ?, payment_method_id = ?, date = ?
            WHERE id = ?`,
           [valor, cleanDescription, selectedCategory, selectedEstablishment, selectedPaymentMethod, dateISO, expense.id]
         );
-        console.log('✅ Despesa atualizada!');
       } else {
-        // Inserção
         await db.runAsync(
           `INSERT INTO expenses (amount, description, categoryId, establishment_id, payment_method_id, date)
            VALUES (?, ?, ?, ?, ?, ?)`,
           [valor, cleanDescription, selectedCategory, selectedEstablishment, selectedPaymentMethod, dateISO]
         );
-        console.log('✅ Despesa criada!');
       }
 
-      // Limpa formulário apenas se for novo cadastro
-      if (!expense?.id) {
-        setAmount("");
-        setDescription("");
-        setSelectedCategory(null);
-        setSelectedEstablishment(null);
-        setSelectedPaymentMethod(null);
-        setSelectedDate(new Date()); // Volta para hoje
-      }
-
-      // 🚀 NOTIFICA AUTOMATICAMENTE OUTRAS TELAS
-      console.log('📢 Notificando outras telas sobre mudança...');
+      setModalVisible(false);
+      await loadRecentExpenses();
       notifyExpenseChange();
-
+      
       Alert.alert("Sucesso", expense?.id ? "Despesa atualizada!" : "Despesa adicionada!");
       if (onSaved) onSaved();
 
@@ -180,36 +183,37 @@ export default function ExpenseForm({ expense, onSaved }) {
     setAmount(formatted);
   }
 
-  // Função para formatar data brasileira
   function formatDateBR(date) {
     return date.toLocaleDateString('pt-BR');
   }
 
-  // Função para verificar se é hoje
   function isToday(date) {
     const today = new Date();
     return date.toDateString() === today.toDateString();
   }
 
-  // Função para verificar se é ontem
   function isYesterday(date) {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     return date.toDateString() === yesterday.toDateString();
   }
 
-  // Função para obter texto da data
   function getDateText(date) {
     if (isToday(date)) return 'Hoje';
     if (isYesterday(date)) return 'Ontem';
     return formatDateBR(date);
   }
 
-  // Componente DatePicker customizado
+  function formatCurrency(value) {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value || 0);
+  }
+
   const CustomDatePicker = () => {
     const [tempDate, setTempDate] = useState(selectedDate);
     
-    // Gera últimos 30 dias
     const generateDateOptions = () => {
       const dates = [];
       for (let i = 0; i < 30; i++) {
@@ -230,18 +234,18 @@ export default function ExpenseForm({ expense, onSaved }) {
         onRequestClose={() => setShowDatePicker(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.datePickerContainer}>
-            <View style={styles.datePickerHeader}>
-              <Text style={styles.datePickerTitle}>📅 Selecionar Data</Text>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>📅 Selecionar Data</Text>
               <TouchableOpacity 
                 onPress={() => setShowDatePicker(false)}
-                style={styles.closeDatePicker}
+                style={styles.closeButton}
               >
-                <Text style={styles.closeDatePickerText}>✕</Text>
+                <Text style={styles.closeButtonText}>✕</Text>
               </TouchableOpacity>
             </View>
             
-            <ScrollView style={styles.dateOptionsList}>
+            <ScrollView style={styles.modalBody}>
               {dateOptions.map((date, index) => {
                 const isSelected = tempDate.toDateString() === date.toDateString();
                 return (
@@ -275,19 +279,19 @@ export default function ExpenseForm({ expense, onSaved }) {
               })}
             </ScrollView>
 
-            <View style={styles.datePickerFooter}>
+            <View style={styles.modalFooter}>
               <TouchableOpacity 
-                style={styles.cancelDateButton}
+                style={styles.cancelButton}
                 onPress={() => setShowDatePicker(false)}
               >
-                <Text style={styles.cancelDateButtonText}>Cancelar</Text>
+                <Text style={styles.cancelButtonText}>Cancelar</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={styles.confirmDateButton}
+                style={styles.saveButton}
                 onPress={() => handleDateSelect(tempDate)}
               >
-                <Text style={styles.confirmDateButtonText}>✓ Confirmar</Text>
+                <Text style={styles.saveButtonText}>✓ Confirmar</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -296,239 +300,250 @@ export default function ExpenseForm({ expense, onSaved }) {
     );
   };
 
-  const isFormValid = selectedCategory && !Object.keys(errors).length && description.trim() && amount.trim();
-  const filledFields = [description.trim(), amount.trim(), selectedCategory].filter(Boolean).length;
-  const progressPercentage = (filledFields / 3) * 100;
+  const renderExpensePreview = () => {
+    const hasData = description || amount || selectedCategory;
+    
+    if (!hasData) return null;
 
-  if (saving) {
+    return (
+      <View style={styles.previewContainer}>
+        <Text style={styles.previewLabel}>Preview:</Text>
+        <View style={styles.previewCard}>
+          <View style={styles.previewIcon}>
+            <Text style={styles.previewIconText}>💰</Text>
+          </View>
+          <View style={styles.previewContent}>
+            <Text style={styles.previewName}>
+              {description || 'Descrição da despesa'}
+            </Text>
+            <Text style={styles.previewAmount}>
+              {amount ? formatCurrency(parseFloat(amount.replace(',', '.')) || 0) : 'R$ 0,00'}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#10b981" />
-        <Text style={styles.loadingText}>Salvando despesa...</Text>
+        <Text style={styles.loadingText}>Carregando despesas...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <ScrollView 
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>
-            {expense?.id ? "✏️ Editar Despesa" : "💰 Nova Despesa"}
-          </Text>
-          <Text style={styles.headerSubtitle}>
-            Registre seus gastos de forma organizada
-          </Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <View style={styles.headerTextContainer}>
+            <View style={styles.titleRow}>
+              <Text style={styles.titleIcon}>💰</Text>
+              <Text style={styles.title}>Despesas</Text>
+            </View>
+            <Text style={styles.subtitle}>
+              {expenses.length === 0 
+                ? "Registre suas despesas" 
+                : `${expenses.length} despesa${expenses.length !== 1 ? 's' : ''} recente${expenses.length !== 1 ? 's' : ''}`
+              }
+            </Text>
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.addButton}
+            onPress={openNewExpenseModal}
+          >
+            <Text style={styles.addButtonIcon}>+</Text>
+            <Text style={styles.addButtonText}>Nova</Text>
+          </TouchableOpacity>
         </View>
+      </View>
 
-        {/* Card 1: Dados Básicos */}
-        <View style={styles.card}>
-          <View style={styles.fieldGroup}>
-            <View style={styles.field}>
-              <Text style={styles.label}>📝 Descrição *</Text>
-              <TextInput
-                style={[
-                  styles.input, 
-                  errors.description && styles.inputError,
-                  description.trim() && !errors.description && styles.inputSuccess
-                ]}
-                placeholder="Ex: Almoço no restaurante, Combustível"
-                placeholderTextColor="#9ca3af"
-                value={description}
-                onChangeText={setDescription}
-                maxLength={100}
-              />
-              {errors.description && (
-                <Text style={styles.errorText}>⚠️ {errors.description}</Text>
-              )}
-              <Text style={styles.charCount}>{description.length}/100</Text>
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>💰 Valor *</Text>
-              <View style={[
-                styles.amountContainer,
-                errors.amount && styles.inputError,
-                amount.trim() && !errors.amount && styles.inputSuccess
-              ]}>
-                <Text style={styles.currency}>R$</Text>
-                <TextInput
-                  style={styles.amountInput}
-                  placeholder="25,50"
-                  placeholderTextColor="#9ca3af"
-                  value={amount}
-                  onChangeText={handleAmountChange}
-                  keyboardType="numeric"
-                />
+      {/* Lista de Despesas Recentes */}
+      {expenses.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyIcon}>💰</Text>
+          <Text style={styles.emptyTitle}>Nenhuma despesa ainda</Text>
+          <Text style={styles.emptySubtitle}>
+            Comece a registrar suas despesas para ter controle dos seus gastos!
+          </Text>
+          <TouchableOpacity 
+            style={styles.emptyButton}
+            onPress={openNewExpenseModal}
+          >
+            <Text style={styles.emptyButtonText}>➕ Criar Primeira Despesa</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
+          <Text style={styles.listTitle}>Últimas despesas</Text>
+          {expenses.map((item, index) => (
+            <View key={item.id} style={[styles.expenseCard, { marginTop: index === 0 ? 0 : 6 }]}>
+              <View style={styles.expenseContent}>
+                <View style={styles.expenseIconContainer}>
+                  <Text style={styles.expenseIconText}>{item.icon}</Text>
+                </View>
+                
+                <View style={styles.expenseInfo}>
+                  <Text style={styles.expenseName}>{item.description}</Text>
+                  <Text style={styles.expenseCategory}>{item.category}</Text>
+                </View>
+                
+                <Text style={styles.expenseAmount}>{formatCurrency(item.amount)}</Text>
               </View>
-              {errors.amount && (
-                <Text style={styles.errorText}>⚠️ {errors.amount}</Text>
-              )}
+            </View>
+          ))}
+          
+          <TouchableOpacity 
+            style={styles.newButton}
+            onPress={openNewExpenseModal}
+          >
+            <Text style={styles.newButtonText}>➕ Nova Despesa</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      )}
+
+      {/* Modal do Formulário */}
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Header do Modal */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {expense?.id ? '✏️ Editar Despesa' : '➕ Nova Despesa'}
+              </Text>
+              <TouchableOpacity 
+                onPress={() => setModalVisible(false)}
+                style={styles.closeButton}
+              >
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
             </View>
 
-            {/* NOVO: Campo de Data */}
-            <View style={styles.field}>
-              <Text style={styles.label}>📅 Data *</Text>
-              <TouchableOpacity
-                style={styles.dateSelector}
-                onPress={() => setShowDatePicker(true)}
-                activeOpacity={0.8}
-              >
-                <View style={styles.dateSelectorContent}>
-                  <View style={styles.dateSelectorLeft}>
-                    <Text style={styles.dateSelectorIcon}>📅</Text>
-                    <View style={styles.dateSelectorTextContainer}>
-                      <Text style={styles.dateSelectorMain}>
-                        {getDateText(selectedDate)}
-                      </Text>
-                      <Text style={styles.dateSelectorSub}>
-                        {formatDateBR(selectedDate)}
-                      </Text>
-                    </View>
+            {/* Formulário */}
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              {/* Campos Básicos */}
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>📝 Descrição *</Text>
+                <TextInput
+                  style={[styles.textInput, errors.description && styles.inputError]}
+                  placeholder="Ex: Almoço no restaurante"
+                  value={description}
+                  onChangeText={setDescription}
+                  maxLength={100}
+                  autoFocus={true}
+                />
+                {errors.description && (
+                  <Text style={styles.errorText}>{errors.description}</Text>
+                )}
+                <Text style={styles.charCounter}>{description.length}/100</Text>
+              </View>
+
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>💰 Valor *</Text>
+                <View style={[styles.amountContainer, errors.amount && styles.inputError]}>
+                  <Text style={styles.currency}>R$</Text>
+                  <TextInput
+                    style={styles.amountInput}
+                    placeholder="0,00"
+                    value={amount}
+                    onChangeText={handleAmountChange}
+                    keyboardType="numeric"
+                  />
+                </View>
+                {errors.amount && (
+                  <Text style={styles.errorText}>{errors.amount}</Text>
+                )}
+              </View>
+
+              {/* Data */}
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>📅 Data *</Text>
+                <TouchableOpacity
+                  style={styles.dateSelector}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Text style={styles.dateSelectorIcon}>📅</Text>
+                  <View style={styles.dateSelectorContent}>
+                    <Text style={styles.dateSelectorMain}>
+                      {getDateText(selectedDate)}
+                    </Text>
+                    <Text style={styles.dateSelectorSub}>
+                      {formatDateBR(selectedDate)}
+                    </Text>
                   </View>
                   <Text style={styles.dateSelectorArrow}>▼</Text>
-                </View>
+                </TouchableOpacity>
+              </View>
+
+              {/* Categoria */}
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>📂 Categoria *</Text>
+                <ExpenseCategoryList 
+                  selectedCategory={selectedCategory}
+                  onCategorySelect={handleCategorySelect}
+                />
+              </View>
+
+              {/* Forma de Pagamento */}
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>💳 Forma de Pagamento</Text>
+                <ExpensePaymentMethodList 
+                  selectedMethod={selectedPaymentMethod}
+                  onMethodSelect={handlePaymentMethodSelect}
+                />
+              </View>
+
+              {/* Estabelecimento */}
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>🏪 Estabelecimento</Text>
+                <ExpenseEstablishmentList 
+                  selectedEstablishment={selectedEstablishment}
+                  onEstablishmentSelect={handleEstablishmentSelect}
+                />
+              </View>
+
+              {/* Preview */}
+              {renderExpensePreview()}
+            </ScrollView>
+
+            {/* Footer com Botões */}
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[
+                  styles.saveButton,
+                  (!description.trim() || !amount.trim() || !selectedCategory) && styles.saveButtonDisabled
+                ]}
+                onPress={handleSave}
+                disabled={!description.trim() || !amount.trim() || !selectedCategory || saving}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.saveButtonText}>
+                    {expense?.id ? '💾 Salvar' : '➕ Criar'}
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
         </View>
-
-        {/* Card 2: Categoria e Forma de Pagamento */}
-        <View style={styles.card}>
-          <View style={styles.fieldGroup}>
-            {/* Categoria */}
-            <View style={styles.field}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardIcon}>📂</Text>
-                <Text style={styles.cardTitle}>Categoria *</Text>
-                {selectedCategory && (
-                  <View style={[styles.statusBadge, {backgroundColor: '#10b981'}]}>
-                    <Text style={styles.statusText}>✓</Text>
-                  </View>
-                )}
-              </View>
-              <ExpenseCategoryList 
-                selectedCategory={selectedCategory}
-                onCategorySelect={handleCategorySelect}
-              />
-            </View>
-
-            {/* Forma de Pagamento */}
-            <View style={[styles.field, {marginTop: 20}]}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardIcon}>💳</Text>
-                <Text style={styles.cardTitle}>Forma de Pagamento</Text>
-                <Text style={styles.optionalLabel}>(recomendado)</Text>
-                {selectedPaymentMethod && (
-                  <View style={[styles.statusBadge, {backgroundColor: '#8b5cf6'}]}>
-                    <Text style={styles.statusText}>✓</Text>
-                  </View>
-                )}
-              </View>
-              <ExpensePaymentMethodList 
-                selectedMethod={selectedPaymentMethod}
-                onMethodSelect={handlePaymentMethodSelect}
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Card 3: Estabelecimento */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardIcon}>🏪</Text>
-            <Text style={styles.cardTitle}>Estabelecimento</Text>
-            <Text style={styles.optionalLabel}>(opcional)</Text>
-            {selectedEstablishment && (
-              <View style={[styles.statusBadge, {backgroundColor: '#3b82f6'}]}>
-                <Text style={styles.statusText}>✓</Text>
-              </View>
-            )}
-          </View>
-          
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldDescription}>
-              Onde você realizou esta despesa?
-            </Text>
-            <ExpenseEstablishmentList 
-              selectedEstablishment={selectedEstablishment}
-              onEstablishmentSelect={handleEstablishmentSelect}
-            />
-          </View>
-        </View>
-
-        {/* Progress */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressHeader}>
-            <Text style={styles.progressText}>
-              Progresso: {filledFields}/3 campos obrigatórios
-            </Text>
-            <Text style={styles.progressPercentage}>
-              {Math.round(progressPercentage)}%
-            </Text>
-          </View>
-          <View style={styles.progressBar}>
-            <View style={[
-              styles.progressFill, 
-              { width: `${progressPercentage}%` }
-            ]} />
-          </View>
-          <View style={styles.progressBonusContainer}>
-            {selectedPaymentMethod && (
-              <Text style={styles.progressBonus}>
-                💳 Forma de pagamento (+1 bonus)
-              </Text>
-            )}
-            {selectedEstablishment && (
-              <Text style={styles.progressBonus}>
-                🏪 Estabelecimento (+1 bonus)
-              </Text>
-            )}
-          </View>
-        </View>
-
-        {/* Auto-update Info */}
-        <View style={styles.autoUpdateInfo}>
-          <Text style={styles.autoUpdateText}>
-            🚀 O resumo será atualizado automaticamente após salvar!
-          </Text>
-        </View>
-
-        {/* Espaço para o botão não ficar grudado nos controles do celular */}
-        <View style={styles.bottomSpacer} />
-      </ScrollView>
-
-      {/* Botão Fixo na Parte Inferior */}
-      <View style={styles.bottomContainer}>
-        <TouchableOpacity 
-          style={[
-            styles.saveButton, 
-            isFormValid ? styles.saveButtonActive : styles.saveButtonInactive
-          ]} 
-          onPress={handleSave} 
-          disabled={!isFormValid || saving}
-        >
-          {saving ? (
-            <View style={styles.savingContainer}>
-              <ActivityIndicator size="small" color="#ffffff" />
-              <Text style={styles.saveButtonText}>Salvando...</Text>
-            </View>
-          ) : (
-            <Text style={[
-              styles.saveButtonText,
-              isFormValid ? styles.saveButtonTextActive : styles.saveButtonTextInactive
-            ]}>
-              {expense?.id ? "💾 Atualizar Despesa" : "💾 Salvar Despesa"}
-            </Text>
-          )}
-        </TouchableOpacity>
-      </View>
+      </Modal>
 
       {/* Date Picker Modal */}
       <CustomDatePicker />
@@ -539,519 +554,484 @@ export default function ExpenseForm({ expense, onSaved }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#f7f9fc',
   },
-  
-  // ScrollView
-  scrollContainer: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 90, // Espaço para o botão fixo
-  },
-
-  // Header
   header: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
-  },
-
-  // Cards
-  card: {
     backgroundColor: '#ffffff',
-    borderRadius: 6,
-    padding: 20,
-    marginBottom: 8,
-    shadowColor: '#000',
+    paddingTop: 16,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 0,
+    shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.08)',
+    elevation: 4,
   },
-  
-  cardHeader: {
+  headerContent: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
   },
-  
-  cardIcon: {
-    fontSize: 24,
-    marginRight: 12,
-  },
-  
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1f2937',
+  headerTextContainer: {
     flex: 1,
   },
-
-  optionalLabel: {
-    fontSize: 14,
-    color: '#9ca3af',
-    fontStyle: 'italic',
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  titleIcon: {
+    fontSize: 18,
     marginRight: 8,
   },
-
-  statusBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
+  title: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1e293b',
   },
-
-  statusText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-
-  // Fields
-  fieldGroup: {
-    gap: 16,
-  },
-  
-  field: {
-    marginBottom: 0,
-  },
-  
-  fieldDescription: {
+  subtitle: {
     fontSize: 13,
-    color: '#9ca3af',
-    marginBottom: 12,
-    fontStyle: 'italic',
+    color: '#64748b',
+    fontWeight: '400',
   },
-  
-  label: {
+  addButton: {
+    backgroundColor: '#10b981',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  addButtonIcon: {
+    fontSize: 16,
+    color: '#ffffff',
+    fontWeight: '600',
+    marginRight: 6,
+  },
+  addButtonText: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  list: {
+    flex: 1,
+    padding: 16,
+  },
+  listTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 8,
+    marginBottom: 12,
+    marginLeft: 4,
   },
-  
-  input: {
-    backgroundColor: '#f9fafb',
+  expenseCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    marginBottom: 8,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 3,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderColor: 'rgba(99, 102, 241, 0.08)',
+    minHeight: 64,
+  },
+  expenseContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  expenseIconContainer: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#f0f4ff',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.12)',
+  },
+  expenseIconText: {
+    fontSize: 18,
+  },
+  expenseInfo: {
+    flex: 1,
+  },
+  expenseName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 2,
+  },
+  expenseCategory: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  expenseAmount: {
     fontSize: 16,
-    color: '#1f2937',
+    fontWeight: '700',
+    color: '#10b981',
+  },
+  newButton: {
+    backgroundColor: '#f0f4ff',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.2)',
+  },
+  newButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6366f1',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 20,
+    opacity: 0.3,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 32,
+  },
+  emptyButton: {
+    backgroundColor: '#10b981',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  emptyButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f7f9fc',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#64748b',
     fontWeight: '500',
   },
 
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    width: '92%',
+    maxHeight: '85%',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 24 },
+    shadowOpacity: 0.2,
+    shadowRadius: 48,
+    elevation: 24,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#f8fafc',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  closeButtonText: {
+    fontSize: 18,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  modalBody: {
+    padding: 24,
+    maxHeight: 450,
+  },
+  fieldContainer: {
+    marginBottom: 24,
+  },
+  fieldLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 10,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    fontSize: 16,
+    backgroundColor: '#fafbfc',
+    color: '#1e293b',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
   inputError: {
     borderColor: '#ef4444',
     backgroundColor: '#fef2f2',
   },
-
-  inputSuccess: {
-    borderColor: '#10b981',
-    backgroundColor: '#f0fdf4',
-  },
-
   errorText: {
     color: '#ef4444',
     fontSize: 14,
-    marginTop: 4,
+    marginTop: 6,
     fontWeight: '500',
   },
-
-  successText: {
-    color: '#10b981',
-    fontSize: 14,
-    marginTop: 4,
-    fontWeight: '500',
-  },
-
-  charCount: {
+  charCounter: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: '#94a3b8',
     textAlign: 'right',
-    marginTop: 4,
+    marginTop: 6,
   },
-
-  // Amount Field
   amountContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 6,
-    paddingLeft: 16,
+    borderColor: '#e2e8f0',
+    borderRadius: 16,
+    paddingLeft: 18,
+    backgroundColor: '#fafbfc',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
-
   currency: {
     fontSize: 16,
     fontWeight: '600',
     color: '#6b7280',
     marginRight: 8,
   },
-
   amountInput: {
     flex: 1,
-    paddingVertical: 12,
-    paddingRight: 16,
+    paddingVertical: 16,
+    paddingRight: 18,
     fontSize: 16,
-    color: '#1f2937',
-    fontWeight: '500',
+    color: '#1e293b',
   },
-
-  // NOVO: Date Selector
   dateSelector: {
-    backgroundColor: '#f9fafb',
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderColor: '#e2e8f0',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    backgroundColor: '#fafbfc',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
-
-  dateSelectorContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-
-  dateSelectorLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-
   dateSelectorIcon: {
     fontSize: 20,
     marginRight: 12,
   },
-
-  dateSelectorTextContainer: {
+  dateSelectorContent: {
     flex: 1,
   },
-
   dateSelectorMain: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: '#1e293b',
     marginBottom: 2,
   },
-
   dateSelectorSub: {
     fontSize: 13,
     color: '#6b7280',
   },
-
   dateSelectorArrow: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: '#94a3b8',
     fontWeight: '600',
   },
-
-  // Date Picker Modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'flex-end',
-  },
-
-  datePickerContainer: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '80%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
-    elevation: 12,
-  },
-
-  datePickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-
-  datePickerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1f2937',
-  },
-
-  closeDatePicker: {
-    width: 32,
-    height: 32,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  closeDatePickerText: {
-    fontSize: 16,
-    color: '#6b7280',
-    fontWeight: 'bold',
-  },
-
-  dateOptionsList: {
-    maxHeight: 400,
-    paddingHorizontal: 20,
-  },
-
   dateOption: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginVertical: 2,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
   },
-
   dateOptionSelected: {
-    backgroundColor: '#eff6ff',
-    borderWidth: 1,
-    borderColor: '#3b82f6',
+    backgroundColor: '#f0f4ff',
   },
-
   dateOptionContent: {
     flex: 1,
   },
-
   dateOptionMain: {
     fontSize: 16,
     fontWeight: '600',
     color: '#374151',
     marginBottom: 2,
   },
-
   dateOptionMainSelected: {
-    color: '#1e40af',
-    fontWeight: '700',
+    color: '#6366f1',
   },
-
   dateOptionSub: {
     fontSize: 13,
     color: '#6b7280',
   },
-
   dateOptionSubSelected: {
-    color: '#3b82f6',
+    color: '#6366f1',
   },
-
   dateCheckmark: {
     fontSize: 18,
-    color: '#3b82f6',
+    color: '#6366f1',
     fontWeight: '700',
   },
-
-  datePickerFooter: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-    gap: 12,
+  previewContainer: {
+    marginBottom: 24,
   },
-
-  cancelDateButton: {
-    flex: 1,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 6,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-
-  cancelDateButtonText: {
+  previewLabel: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-
-  confirmDateButton: {
-    flex: 1,
-    backgroundColor: '#3b82f6',
-    borderRadius: 6,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-
-  confirmDateButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-
-  // Progress
-  progressContainer: {
-    backgroundColor: '#f8fafc',
-    padding: 16,
-    borderRadius: 6,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-
-  progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-
-  progressText: {
-    fontSize: 14,
-    color: '#6b7280',
     fontWeight: '500',
+    color: '#374151',
+    marginBottom: 16,
   },
-
-  progressPercentage: {
-    fontSize: 14,
-    color: '#10b981',
-    fontWeight: '700',
-  },
-
-  progressBar: {
-    height: 6,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#10b981',
-    borderRadius: 3,
-  },
-
-  progressBonus: {
-    fontSize: 12,
-    color: '#3b82f6',
-    textAlign: 'center',
-    marginTop: 2,
-    fontWeight: '600',
-  },
-
-  progressBonusContainer: {
-    marginTop: 8,
-    gap: 4,
-  },
-
-  // Auto Update Info
-  autoUpdateInfo: {
-    backgroundColor: '#dcfce7',
-    padding: 12,
-    borderRadius: 6,
-    marginBottom: 8,
+  previewCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    padding: 20,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#bbf7d0',
-  },
-
-  autoUpdateText: {
-    fontSize: 14,
-    color: '#166534',
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-
-  // Bottom Spacer
-  bottomSpacer: {
-    height: 12,
-  },
-
-  // Bottom Container (Botão Fixo)
-  bottomContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#ffffff',
-    padding: 16,
-    paddingBottom: 34, // Espaço extra para não interferir com controles do celular
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
+    borderColor: '#e2e8f0',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 2,
   },
-
-  // Save Button
+  previewIcon: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  previewIconText: {
+    fontSize: 20,
+  },
+  previewContent: {
+    flex: 1,
+  },
+  previewName: {
+    fontSize: 17,
+    fontWeight: '500',
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  previewAmount: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#10b981',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    gap: 16,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#64748b',
+  },
   saveButton: {
-    borderRadius: 6,
+    flex: 1,
+    backgroundColor: '#10b981',
+    borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center',
     shadowColor: '#10b981',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-
-  saveButtonActive: {
-    backgroundColor: '#10b981',
-  },
-
-  saveButtonInactive: {
-    backgroundColor: '#e5e7eb',
+  saveButtonDisabled: {
+    backgroundColor: '#d1d5db',
     shadowOpacity: 0,
     elevation: 0,
   },
-
   saveButtonText: {
     fontSize: 16,
-    fontWeight: 'bold',
-  },
-
-  saveButtonTextActive: {
+    fontWeight: '600',
     color: '#ffffff',
-  },
-
-  saveButtonTextInactive: {
-    color: '#9ca3af',
-  },
-
-  savingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-
-  // Loading
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-  },
-
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#6b7280',
   },
 });

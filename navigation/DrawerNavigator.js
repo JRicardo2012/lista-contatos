@@ -1,4 +1,4 @@
-// navigation/DrawerNavigator.js - VERSÃO SIMPLES (SÓ TEXTOS MAIORES)
+// navigation/DrawerNavigator.js - VERSÃO ATUALIZADA
 import Dashboard from '../components/Dashboard';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import CategoryManager from '../components/CategoryManager';
@@ -7,7 +7,7 @@ import EstablishmentManager from '../components/EstablishmentManager';
 import GroupedExpenseList from '../components/GroupedExpenseList';
 import AnnualExpenseSummary from '../components/AnnualExpenseSummary';
 import PaymentMethodManager from '../components/PaymentMethodManager';
-
+import MonthlyReport from '../components/MonthlyReport';
 
 const Drawer = createDrawerNavigator();
 
@@ -25,14 +25,14 @@ export default function DrawerNavigator() {
         },
         headerTintColor: '#FFFFFF',
         headerTitleStyle: {
-          fontSize: 17, // ⬆️ AUMENTADO
+          fontSize: 17,
           fontWeight: '700',
         },
         
         // 🎨 DRAWER PERSONALIZADO COM TEXTOS MAIORES
         drawerStyle: {
           backgroundColor: '#FFFFFF',
-          width: 320, // ⬆️ LARGURA AUMENTADA PARA ACOMODAR TEXTOS
+          width: 320,
         },
         drawerActiveTintColor: '#6366F1',
         drawerInactiveTintColor: '#374151',
@@ -40,9 +40,9 @@ export default function DrawerNavigator() {
         
         // 📝 TEXTOS DO DRAWER - AUMENTADOS
         drawerLabelStyle: {
-          fontSize: 17, // ⬆️ MUITO MAIOR (era 16)
-          fontWeight: '650', // ⬆️ MAIS BOLD
-          marginLeft: -12, // Ajusta posição
+          fontSize: 17,
+          fontWeight: '650',
+          marginLeft: -12,
           lineHeight: 24,
         },
         
@@ -50,9 +50,8 @@ export default function DrawerNavigator() {
         drawerItemStyle: {
           borderRadius: 12,
           marginHorizontal: 12,
-          
           marginVertical: 4,
-          paddingVertical: 8, // ⬆️ MAIS ESPAÇAMENTO
+          paddingVertical: 8,
         },
         
         // 🎯 TIPO DO DRAWER
@@ -72,8 +71,8 @@ export default function DrawerNavigator() {
         name="Despesas"
         component={ExpenseManager}
         options={{ 
-          drawerLabel: "💰 Nova Despesa",
-          title: "Registrar Despesa"
+          drawerLabel: "💰 Gerenciar Despesas",
+          title: "Gerenciador de Despesas"
         }}
       />
       <Drawer.Screen
@@ -85,10 +84,18 @@ export default function DrawerNavigator() {
         }}
       />
       <Drawer.Screen
+        name="Relatório Mensal"
+        component={MonthlyReport}
+        options={{ 
+          drawerLabel: "📈 Relatório Mensal",
+          title: "Análise Mensal"
+        }}
+      />
+      <Drawer.Screen
         name="Resumo Anual"
         component={AnnualExpenseSummary}
         options={{ 
-          drawerLabel: "📈 Resumo Anual",
+          drawerLabel: "📅 Resumo Anual",
           title: "Análise Anual"
         }}
       />
@@ -116,7 +123,6 @@ export default function DrawerNavigator() {
           title: "Métodos de Pagamento"
         }}
       />
-      
     </Drawer.Navigator>
   );
 }

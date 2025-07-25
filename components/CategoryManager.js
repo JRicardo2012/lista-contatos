@@ -1,4 +1,4 @@
-// components/PaymentMethodManager.js - VERSÃO CORRIGIDA
+// components/CategoryManager.js - VERSÃO CORRETA
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -11,65 +11,66 @@ import {
   ScrollView,
   Modal,
 } from "react-native";
-import { StyleSheet } from "react-native"; // Importação separada para debug
+import { StyleSheet } from "react-native";
 import { useSQLiteContext } from "expo-sqlite";
 
-export default function PaymentMethodManager() {
+export default function CategoryManager() {
   const db = useSQLiteContext();
   
-  const [paymentMethods, setPaymentMethods] = useState([]);
-  const [newMethodName, setNewMethodName] = useState("");
-  const [selectedIcon, setSelectedIcon] = useState('💳');
+  const [categories, setCategories] = useState([]);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [selectedIcon, setSelectedIcon] = useState('📂');
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
-  const [editingMethod, setEditingMethod] = useState(null);
+  const [editingCategory, setEditingCategory] = useState(null);
 
-  // 🆕 ÍCONES DISPONÍVEIS PARA FORMAS DE PAGAMENTO
+  // 🎨 ÍCONES DISPONÍVEIS PARA CATEGORIAS
   const availableIcons = [
-    '💳', '💵', '💰', '🏦', '📱', '💸', '🪙', '📲',
-    '🏧', '💎', '🎫', '🎟️', '📄', '✅', '🔄', '⚡',
-    '🛒', '🛍️', '💶', '💷', '💴', '🏪', '🏬', '🎁'
+    '🍽️', '🛒', '🏠', '🚗', '⛽', '🎮', '🎬', '📚',
+    '🏥', '💊', '👕', '👟', '✈️', '🏖️', '🎁', '💰',
+    '📱', '💻', '🏋️', '🚌', '🚇', '🏪', '☕', '🍺',
+    '🎯', '🔧', '🐾', '👶', '🎓', '💼', '🏦', '📦'
   ];
 
   useEffect(() => {
     if (db) {
-      loadPaymentMethods();
+      loadCategories();
     }
   }, [db]);
 
-  const openNewMethodModal = () => {
-    setEditingMethod(null);
-    setNewMethodName("");
-    setSelectedIcon('💳');
+  const openNewCategoryModal = () => {
+    setEditingCategory(null);
+    setNewCategoryName("");
+    setSelectedIcon('📂');
     setModalVisible(true);
   };
 
-  const openEditMethodModal = (method) => {
-    setEditingMethod(method);
-    setNewMethodName(method.name);
-    setSelectedIcon(method.icon || '💳');
+  const openEditCategoryModal = (category) => {
+    setEditingCategory(category);
+    setNewCategoryName(category.name);
+    setSelectedIcon(category.icon || '📂');
     setModalVisible(true);
   };
 
-  async function loadPaymentMethods() {
+  async function loadCategories() {
     try {
-      console.log('🔍 Carregando métodos de pagamento...');
+      console.log('🔍 Carregando categorias...');
       
-      const result = await db.getAllAsync("SELECT * FROM payment_methods ORDER BY name");
+      const result = await db.getAllAsync("SELECT * FROM categories ORDER BY name");
       
       // Remove duplicatas baseado no nome
-      const uniqueMethods = result.filter((method, index, self) => 
-        index === self.findIndex(m => m.name === method.name)
+      const uniqueCategories = result.filter((category, index, self) => 
+        index === self.findIndex(c => c.name === category.name)
       );
       
-      setPaymentMethods(uniqueMethods);
-      console.log(`✅ ${uniqueMethods.length} métodos de pagamento carregados`);
+      setCategories(uniqueCategories);
+      console.log(`✅ ${uniqueCategories.length} categorias carregadas`);
       
     } catch (err) {
-      console.error("❌ Erro ao carregar métodos de pagamento:", err);
+      console.error("❌ Erro ao carregar categorias:", err);
       Alert.alert(
         "Erro", 
-        "Não foi possível carregar os métodos de pagamento.",
+        "Não foi possível carregar as categorias.",
         [{ text: "OK", onPress: () => setLoading(false) }]
       );
     } finally {
@@ -77,11 +78,11 @@ export default function PaymentMethodManager() {
     }
   }
 
-  async function handleSaveMethod() {
-    const name = newMethodName.trim();
+  async function handleSaveCategory() {
+    const name = newCategoryName.trim();
     
     if (!name) {
-      Alert.alert("Validação", "Digite um nome para o método de pagamento.");
+      Alert.alert("Validação", "Digite um nome para a categoria.");
       return;
     }
 
@@ -96,45 +97,57 @@ export default function PaymentMethodManager() {
     }
 
     try {
-      if (editingMethod) {
-        // Editando método existente
+      if (editingCategory) {
+        // Editando categoria existente
         await db.runAsync(
-          "UPDATE payment_methods SET name = ?, icon = ? WHERE id = ?", 
-          [name, selectedIcon, editingMethod.id]
+          "UPDATE categories SET name = ?, icon = ? WHERE id = ?", 
+          [name, selectedIcon, editingCategory.id]
         );
-        Alert.alert("Sucesso", `Método "${name}" atualizado!`);
+        Alert.alert("Sucesso", `Categoria "${name}" atualizada!`);
       } else {
-        // Criando novo método
+        // Criando nova categoria
         const exists = await db.getFirstAsync(
-          "SELECT id FROM payment_methods WHERE LOWER(name) = LOWER(?)", 
+          "SELECT id FROM categories WHERE LOWER(name) = LOWER(?)", 
           [name]
         );
         
         if (exists) {
-          Alert.alert("Atenção", "Um método de pagamento com este nome já existe.");
+          Alert.alert("Atenção", "Uma categoria com este nome já existe.");
           return;
         }
 
         await db.runAsync(
-          "INSERT INTO payment_methods (name, icon) VALUES (?, ?)", 
+          "INSERT INTO categories (name, icon) VALUES (?, ?)", 
           [name, selectedIcon]
         );
-        Alert.alert("Sucesso", `Método "${name}" criado!`);
+        Alert.alert("Sucesso", `Categoria "${name}" criada!`);
       }
 
       setModalVisible(false);
-      await loadPaymentMethods();
+      await loadCategories();
       
     } catch (error) {
-      console.error("❌ Erro ao salvar método:", error);
-      Alert.alert("Erro", `Não foi possível salvar o método: ${error.message}`);
+      console.error("❌ Erro ao salvar categoria:", error);
+      Alert.alert("Erro", `Não foi possível salvar a categoria: ${error.message}`);
     }
   }
 
-  async function handleDeleteMethod(method) {
+  async function handleDeleteCategory(category) {
+    // Verifica se há despesas usando esta categoria
+    const expenses = await db.getFirstAsync(
+      "SELECT COUNT(*) as count FROM expenses WHERE categoryId = ?",
+      [category.id]
+    );
+
+    let warningMessage = `Deseja excluir a categoria "${category.name}"?`;
+    
+    if (expenses && expenses.count > 0) {
+      warningMessage += `\n\n⚠️ Atenção: ${expenses.count} despesa(s) estão usando esta categoria e ficarão sem categoria.`;
+    }
+
     Alert.alert(
       "⚠️ Confirmar Exclusão", 
-      `Deseja excluir o método "${method.name}"?\n\nEsta ação não pode ser desfeita.`, 
+      warningMessage + "\n\nEsta ação não pode ser desfeita.", 
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -142,12 +155,12 @@ export default function PaymentMethodManager() {
           style: "destructive",
           onPress: async () => {
             try {
-              await db.runAsync("DELETE FROM payment_methods WHERE id = ?", [method.id]);
-              await loadPaymentMethods();
-              Alert.alert("Sucesso", `Método "${method.name}" excluído!`);
+              await db.runAsync("DELETE FROM categories WHERE id = ?", [category.id]);
+              await loadCategories();
+              Alert.alert("Sucesso", `Categoria "${category.name}" excluída!`);
             } catch (error) {
-              console.error("❌ Erro ao excluir método:", error);
-              Alert.alert("Erro", `Não foi possível excluir o método: ${error.message}`);
+              console.error("❌ Erro ao excluir categoria:", error);
+              Alert.alert("Erro", `Não foi possível excluir a categoria: ${error.message}`);
             }
           },
         },
@@ -183,7 +196,7 @@ export default function PaymentMethodManager() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#10b981" />
-        <Text style={styles.loadingText}>Carregando métodos de pagamento...</Text>
+        <Text style={styles.loadingText}>Carregando categorias...</Text>
       </View>
     );
   }
@@ -195,59 +208,59 @@ export default function PaymentMethodManager() {
         <View style={styles.headerContent}>
           <View style={styles.headerTextContainer}>
             <View style={styles.titleRow}>
-              <Text style={styles.titleIcon}>💳</Text>
-              <Text style={styles.title}>Formas de Pagamento</Text>
+              <Text style={styles.titleIcon}>📂</Text>
+              <Text style={styles.title}>Categorias</Text>
             </View>
             <Text style={styles.subtitle}>
-              {paymentMethods.length === 0 
-                ? "Configure suas formas de pagamento" 
-                : `${paymentMethods.length} método${paymentMethods.length !== 1 ? 's' : ''} cadastrado${paymentMethods.length !== 1 ? 's' : ''}`
+              {categories.length === 0 
+                ? "Organize suas despesas por categoria" 
+                : `${categories.length} categoria${categories.length !== 1 ? 's' : ''} cadastrada${categories.length !== 1 ? 's' : ''}`
               }
             </Text>
           </View>
           
           <TouchableOpacity 
             style={styles.addButton}
-            onPress={openNewMethodModal}
+            onPress={openNewCategoryModal}
           >
             <Text style={styles.addButtonIcon}>+</Text>
-            <Text style={styles.addButtonText}>Novo</Text>
+            <Text style={styles.addButtonText}>Nova</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Lista de Métodos */}
-      {paymentMethods.length === 0 ? (
+      {/* Lista de Categorias */}
+      {categories.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>💳</Text>
-          <Text style={styles.emptyTitle}>Nenhum método ainda</Text>
+          <Text style={styles.emptyIcon}>📂</Text>
+          <Text style={styles.emptyTitle}>Nenhuma categoria ainda</Text>
           <Text style={styles.emptySubtitle}>
-            Adicione formas de pagamento como Dinheiro, Cartão de Crédito, PIX, etc.
+            Crie categorias para organizar melhor suas despesas!
           </Text>
           <TouchableOpacity 
             style={styles.emptyButton}
-            onPress={openNewMethodModal}
+            onPress={openNewCategoryModal}
           >
-            <Text style={styles.emptyButtonText}>➕ Criar Primeiro Método</Text>
+            <Text style={styles.emptyButtonText}>➕ Criar Primeira Categoria</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <FlatList
-          data={paymentMethods}
-          keyExtractor={(item) => `payment-method-${item.id}`}
+          data={categories}
+          keyExtractor={(item) => `category-${item.id}`}
           renderItem={({ item, index }) => (
-            <View style={[styles.methodCard, { marginTop: index === 0 ? 0 : 6 }]}>
+            <View style={[styles.categoryCard, { marginTop: index === 0 ? 0 : 6 }]}>
               <TouchableOpacity 
-                style={styles.methodContent}
-                onPress={() => openEditMethodModal(item)}
+                style={styles.categoryContent}
+                onPress={() => openEditCategoryModal(item)}
                 activeOpacity={0.8}
               >
-                <View style={styles.methodIconContainer}>
-                  <Text style={styles.methodIconText}>{item.icon || '💳'}</Text>
+                <View style={styles.categoryIconContainer}>
+                  <Text style={styles.categoryIconText}>{item.icon || '📂'}</Text>
                 </View>
                 
-                <View style={styles.methodInfo}>
-                  <Text style={styles.methodName}>{item.name}</Text>
+                <View style={styles.categoryInfo}>
+                  <Text style={styles.categoryName}>{item.name}</Text>
                 </View>
                 
                 <Text style={styles.editIcon}>✏️</Text>
@@ -255,7 +268,7 @@ export default function PaymentMethodManager() {
               
               <TouchableOpacity 
                 style={styles.deleteButton}
-                onPress={() => handleDeleteMethod(item)}
+                onPress={() => handleDeleteCategory(item)}
                 activeOpacity={0.8}
               >
                 <Text style={styles.deleteButtonText}>🗑️</Text>
@@ -279,7 +292,7 @@ export default function PaymentMethodManager() {
             {/* Header do Modal */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editingMethod ? '✏️ Editar Método' : '➕ Novo Método'}
+                {editingCategory ? '✏️ Editar Categoria' : '➕ Nova Categoria'}
               </Text>
               <TouchableOpacity 
                 onPress={() => setModalVisible(false)}
@@ -293,16 +306,16 @@ export default function PaymentMethodManager() {
             <ScrollView style={styles.modalBody}>
               {/* Campo Nome */}
               <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Nome do Método *</Text>
+                <Text style={styles.fieldLabel}>Nome da Categoria *</Text>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="Ex: Dinheiro, Cartão de Crédito, PIX..."
-                  value={newMethodName}
-                  onChangeText={setNewMethodName}
+                  placeholder="Ex: Alimentação, Transporte, Lazer..."
+                  value={newCategoryName}
+                  onChangeText={setNewCategoryName}
                   maxLength={30}
                   autoFocus={true}
                 />
-                <Text style={styles.charCounter}>{newMethodName.length}/30</Text>
+                <Text style={styles.charCounter}>{newCategoryName.length}/30</Text>
               </View>
 
               {/* Seletor de Ícones */}
@@ -316,7 +329,7 @@ export default function PaymentMethodManager() {
                     <Text style={styles.previewIconText}>{selectedIcon}</Text>
                   </View>
                   <Text style={styles.previewName}>
-                    {newMethodName || 'Nome do método'}
+                    {newCategoryName || 'Nome da categoria'}
                   </Text>
                 </View>
               </View>
@@ -334,13 +347,13 @@ export default function PaymentMethodManager() {
               <TouchableOpacity 
                 style={[
                   styles.saveButton,
-                  !newMethodName.trim() && styles.saveButtonDisabled
+                  !newCategoryName.trim() && styles.saveButtonDisabled
                 ]}
-                onPress={handleSaveMethod}
-                disabled={!newMethodName.trim()}
+                onPress={handleSaveCategory}
+                disabled={!newCategoryName.trim()}
               >
                 <Text style={styles.saveButtonText}>
-                  {editingMethod ? '💾 Salvar' : '➕ Criar'}
+                  {editingCategory ? '💾 Salvar' : '➕ Criar'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -351,8 +364,7 @@ export default function PaymentMethodManager() {
   );
 }
 
-// Definindo estilos como objeto JavaScript para evitar problemas
-const styles = {
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f7f9fc',
@@ -397,13 +409,13 @@ const styles = {
     fontWeight: '400',
   },
   addButton: {
-    backgroundColor: '#34d399',
+    backgroundColor: '#10b981',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
-    shadowColor: '#34d399',
+    borderRadius: 12,
+    shadowColor: '#10b981',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 6,
@@ -423,9 +435,9 @@ const styles = {
   list: {
     padding: 16,
   },
-  methodCard: {
+  categoryCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 8,
     flexDirection: 'row',
     alignItems: 'stretch',
@@ -439,30 +451,30 @@ const styles = {
     borderColor: 'rgba(99, 102, 241, 0.08)',
     minHeight: 64,
   },
-  methodContent: {
+  categoryContent: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
   },
-  methodIconContainer: {
+  categoryIconContainer: {
     width: 40,
     height: 40,
     backgroundColor: '#f0f4ff',
-    borderRadius: 8,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
     borderWidth: 1,
     borderColor: 'rgba(99, 102, 241, 0.12)',
   },
-  methodIconText: {
+  categoryIconText: {
     fontSize: 18,
   },
-  methodInfo: {
+  categoryInfo: {
     flex: 1,
   },
-  methodName: {
+  categoryName: {
     fontSize: 15,
     fontWeight: '600',
     color: '#1e293b',
@@ -513,11 +525,11 @@ const styles = {
     marginBottom: 32,
   },
   emptyButton: {
-    backgroundColor: '#34d399',
+    backgroundColor: '#10b981',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
-    shadowColor: '#34d399',
+    borderRadius: 12,
+    shadowColor: '#10b981',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 6,
@@ -551,7 +563,7 @@ const styles = {
   },
   modalContent: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
+    borderRadius: 24,
     width: '92%',
     maxHeight: '85%',
     shadowColor: '#6366f1',
@@ -577,7 +589,7 @@ const styles = {
     width: 40,
     height: 40,
     backgroundColor: '#f8fafc',
-    borderRadius: 12,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
@@ -604,7 +616,7 @@ const styles = {
   textInput: {
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    borderRadius: 8,
+    borderRadius: 16,
     paddingHorizontal: 18,
     paddingVertical: 16,
     fontSize: 16,
@@ -639,7 +651,7 @@ const styles = {
     width: 56,
     height: 56,
     backgroundColor: '#f8fafc',
-    borderRadius: 12,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -653,8 +665,8 @@ const styles = {
   },
   iconOptionSelected: {
     backgroundColor: '#f0fdf4',
-    borderColor: '#34d399',
-    shadowColor: '#34d399',
+    borderColor: '#10b981',
+    shadowColor: '#10b981',
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
@@ -676,7 +688,7 @@ const styles = {
     alignItems: 'center',
     backgroundColor: '#f8fafc',
     padding: 20,
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     shadowColor: '#6366f1',
@@ -689,7 +701,7 @@ const styles = {
     width: 48,
     height: 48,
     backgroundColor: '#ffffff',
-    borderRadius: 12,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -714,7 +726,7 @@ const styles = {
   cancelButton: {
     flex: 1,
     backgroundColor: '#f8fafc',
-    borderRadius: 8,
+    borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center',
     borderWidth: 1,
@@ -727,11 +739,11 @@ const styles = {
   },
   saveButton: {
     flex: 1,
-    backgroundColor: '#34d399',
-    borderRadius: 8,
+    backgroundColor: '#10b981',
+    borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center',
-    shadowColor: '#34d399',
+    shadowColor: '#10b981',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
@@ -747,4 +759,4 @@ const styles = {
     fontWeight: '600',
     color: '#ffffff',
   },
-};
+});

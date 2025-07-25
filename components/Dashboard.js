@@ -1,12 +1,12 @@
-// components/Dashboard.js - VERSÃO COM HEADER COMPACTO
-// 🎯 INCLUI DADOS DE DEMONSTRAÇÃO PARA MELHOR VISUALIZAÇÃO QUANDO O BANCO ESTÁ VAZIO
-// 💰 LAYOUT COMPACTO COM VALOR DO MÊS EM DESTAQUE REDUZIDO
-// 📅 CORREÇÃO COMPLETA DAS DATAS NA ATIVIDADE RECENTE
-// 🔄 BOTÃO REFRESH REPOSICIONADO E MENOR
-// 📏 HEADER ULTRA COMPACTO - ESPAÇAMENTOS REDUZIDOS
-// ⭐ VALOR PRINCIPAL REDUZIDO PARA 26px + ESPAÇAMENTOS MENORES
-// 📉 SEÇÃO DE COMPARAÇÃO MAIS COMPACTA
-// 🎯 SEÇÃO DE COMPARAÇÃO MICRO PARA NÃO COMPETIR COM O VALOR PRINCIPAL
+// components/Dashboard.js - VERSÃO 2.0 COM MELHORIAS
+// 🆕 NOVAS FUNCIONALIDADES:
+// - Projeção de gastos até fim do mês
+// - Contador de dias sem gastos com gamificação
+// - Top 3 estabelecimentos mais visitados
+// - Detecção de gastos atípicos
+// - Análise de padrões semanais
+// - Insights priorizados e inteligentes
+
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
@@ -49,17 +49,23 @@ export default function Dashboard() {
     categoryDistribution: [],
     weeklyTrend: [],
     monthlyComparison: { current: 0, previous: 0 },
-    insights: []
+    insights: [],
+    // 🆕 NOVOS CAMPOS DE DADOS
+    monthProjection: null,
+    daysWithoutExpenses: null,
+    topEstablishments: [],
+    anomalousExpenses: [],
+    weekdayAnalysis: null
   });
 
   // 🎬 ANIMAÇÕES CORRIGIDAS - Array fixo para 4 cards
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const cardAnimations = useRef([
-    new Animated.Value(1), // Card 0 - Sempre visível desde o início
-    new Animated.Value(1), // Card 1 - Sempre visível desde o início  
-    new Animated.Value(1), // Card 2 - Sempre visível desde o início
-    new Animated.Value(1), // Card 3 - Sempre visível desde o início
+    new Animated.Value(1),
+    new Animated.Value(1),  
+    new Animated.Value(1),
+    new Animated.Value(1),
   ]).current;
   const hasAnimated = useRef(false);
 
@@ -72,7 +78,7 @@ export default function Dashboard() {
     debounceTimeout.current = setTimeout(func, delay);
   }, []);
 
-  // 🚀 FUNÇÃO PRINCIPAL DE CARREGAMENTO
+  // 🚀 FUNÇÃO PRINCIPAL DE CARREGAMENTO - ATUALIZADA
   const loadDashboardData = useCallback(async (isRefresh = false) => {
     if (!db) return;
 
@@ -85,6 +91,7 @@ export default function Dashboard() {
         setIsInitialLoading(true);
       }
 
+      // 🆕 CHAMADAS PARALELAS INCLUINDO NOVAS FUNÇÕES
       const [
         todayData,
         weekData,
@@ -93,7 +100,13 @@ export default function Dashboard() {
         categoryData,
         recentData,
         weeklyTrendData,
-        previousMonthData
+        previousMonthData,
+        // 🆕 NOVAS CHAMADAS
+        projectionData,
+        daysWithoutData,
+        topEstablishments,
+        anomalousExpenses,
+        weekdayAnalysis
       ] = await Promise.all([
         getTodayData(),
         getWeekData(),
@@ -102,18 +115,30 @@ export default function Dashboard() {
         getCategoryDistribution(),
         getRecentExpenses(),
         getWeeklyTrend(),
-        getPreviousMonthData()
+        getPreviousMonthData(),
+        // 🆕 NOVAS FUNÇÕES
+        getMonthProjection(),
+        getDaysWithoutExpenses(),
+        getTopEstablishments(),
+        getAnomalousExpenses(),
+        getWeekdayAnalysis()
       ]);
 
-      const insights = generateInsights({
+      // 🆕 GERA INSIGHTS APRIMORADOS
+      const insights = generateEnhancedInsights({
         today: todayData,
         week: weekData,
         month: monthData,
         year: yearData,
         categories: categoryData,
-        previousMonth: previousMonthData
+        previousMonth: previousMonthData,
+        projection: projectionData,
+        daysWithout: daysWithoutData,
+        anomalies: anomalousExpenses,
+        weekday: weekdayAnalysis
       });
 
+      // 🆕 ESTRUTURA DE DADOS EXPANDIDA
       const newData = {
         todaySpending: todayData.total,
         weekSpending: weekData.total,
@@ -130,12 +155,17 @@ export default function Dashboard() {
           current: monthData.total,
           previous: previousMonthData.total
         },
-        insights
+        insights,
+        // 🆕 NOVOS DADOS
+        monthProjection: projectionData,
+        daysWithoutExpenses: daysWithoutData,
+        topEstablishments: topEstablishments,
+        anomalousExpenses: anomalousExpenses,
+        weekdayAnalysis: weekdayAnalysis
       };
 
       setDashboardData(newData);
 
-      // 🎬 ANIMA APENAS O CONTEÚDO PRINCIPAL, NÃO OS CARDS
       if (!hasAnimated.current && !isRefresh) {
         hasAnimated.current = true;
         startMainAnimations();
@@ -156,7 +186,7 @@ export default function Dashboard() {
     }
   }, [db, isReady]);
 
-  // 🎬 ANIMAÇÕES PRINCIPAIS - SEM AFETAR OS CARDS
+  // 🎬 ANIMAÇÕES PRINCIPAIS
   const startMainAnimations = useCallback(() => {
     fadeAnim.setValue(0);
     slideAnim.setValue(30);
@@ -175,8 +205,7 @@ export default function Dashboard() {
       })
     ]).start();
 
-    // 🎯 CARDS PERMANECEM SEMPRE VISÍVEIS (opacity: 1, scale: 1)
-    console.log('✅ Animações principais iniciadas - Cards permanecem visíveis');
+    console.log('✅ Animações principais iniciadas');
   }, [fadeAnim, slideAnim]);
 
   // 🔄 CARREGAMENTO INICIAL
@@ -226,7 +255,7 @@ export default function Dashboard() {
     };
   }, [db, isReady, isRefreshing, loadDashboardData, debounceCall]);
 
-  // 📊 FUNÇÕES DE DADOS
+  // 📊 FUNÇÕES DE DADOS EXISTENTES
   const getTodayData = async () => {
     const result = await db.getFirstAsync(`
       SELECT 
@@ -236,9 +265,8 @@ export default function Dashboard() {
       WHERE DATE(date) = DATE('now', 'localtime')
     `);
     
-    // 🎯 DEMO: Se não há dados, simula valores para demonstração
     if (!result || result.total === 0) {
-      return { total: 127.50, count: 3 }; // Valores de exemplo para demonstração
+      return { total: 127.50, count: 3 };
     }
     
     return result || { total: 0, count: 0 };
@@ -253,9 +281,8 @@ export default function Dashboard() {
       WHERE DATE(date) >= DATE('now', 'localtime', '-7 days')
     `);
     
-    // 🎯 DEMO: Se não há dados, simula valores para demonstração
     if (!result || result.total === 0) {
-      return { total: 856.40, count: 15 }; // Valores de exemplo
+      return { total: 856.40, count: 15 };
     }
     
     return result || { total: 0, count: 0 };
@@ -270,9 +297,8 @@ export default function Dashboard() {
       WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now', 'localtime')
     `);
     
-    // 🎯 DEMO: Se não há dados, simula valores para demonstração
     if (!result || result.total === 0) {
-      return { total: 2847.90, count: 47 }; // Valores de exemplo maiores
+      return { total: 2847.90, count: 47 };
     }
     
     return result || { total: 0, count: 0 };
@@ -287,9 +313,8 @@ export default function Dashboard() {
       WHERE strftime('%Y', date) = strftime('%Y', 'now', 'localtime')
     `);
     
-    // 🎯 DEMO: Se não há dados, simula valores para demonstração
     if (!result || result.total === 0) {
-      return { total: 15420.65, count: 234 }; // Valores anuais de exemplo
+      return { total: 15420.65, count: 234 };
     }
     
     return result || { total: 0, count: 0 };
@@ -310,7 +335,6 @@ export default function Dashboard() {
       LIMIT 8
     `);
 
-    // 🎯 DEMO: Se não há dados, simula distribuição para demonstração
     if (!results || results.length === 0) {
       return [
         { category: 'Alimentação', icon: '🍽️', total: 856.40, count: 18, color: getColorForIndex(0) },
@@ -343,7 +367,6 @@ export default function Dashboard() {
       LIMIT 8
     `);
 
-    // 🎯 DEMO: Se não há dados, simula despesas para demonstração
     if (!result || result.length === 0) {
       const today = new Date().toISOString();
       const yesterday = new Date();
@@ -416,7 +439,6 @@ export default function Dashboard() {
       const dateStr = date.toISOString().split('T')[0];
       const found = results.find(r => r.date === dateStr);
       
-      // 🎯 DEMO: Se não há dados, simula valores para demonstração do gráfico
       let demoValue = 0;
       if (!results || results.length === 0) {
         const demoValues = [85.50, 134.20, 67.80, 198.40, 156.70, 89.30, 124.50];
@@ -441,64 +463,347 @@ export default function Dashboard() {
       WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now', 'localtime', '-1 month')
     `);
     
-    // 🎯 DEMO: Se não há dados, simula valores para demonstração da comparação
     if (!result || result.total === 0) {
-      return { total: 2456.30 }; // Valor anterior menor para mostrar aumento
+      return { total: 2456.30 };
     }
     
     return result || { total: 0 };
   };
 
-  const generateInsights = (data) => {
+  // ========================================
+  // 🆕 NOVAS FUNÇÕES DE DADOS
+  // ========================================
+
+  /**
+   * 🎯 Calcula a projeção de gastos até o fim do mês
+   */
+  const getMonthProjection = async () => {
+    try {
+      const hoje = new Date();
+      const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+      const diaAtual = hoje.getDate();
+      
+      const monthData = await db.getFirstAsync(`
+        SELECT 
+          COALESCE(SUM(CAST(amount AS REAL)), 0) as total,
+          COUNT(DISTINCT DATE(date)) as dias_com_gastos
+        FROM expenses 
+        WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now', 'localtime')
+      `);
+      
+      if (!monthData || monthData.total === 0) {
+        return {
+          projecao: 0,
+          mediaDiaria: 0,
+          diasRestantes: diasNoMes - diaAtual,
+          percentualMes: (diaAtual / diasNoMes) * 100,
+          totalAtual: 0
+        };
+      }
+      
+      const mediaDiaria = monthData.dias_com_gastos > 0 
+        ? monthData.total / monthData.dias_com_gastos 
+        : monthData.total / diaAtual;
+      
+      const diasRestantes = diasNoMes - diaAtual;
+      const projecao = monthData.total + (mediaDiaria * diasRestantes);
+      
+      return {
+        projecao,
+        mediaDiaria,
+        diasRestantes,
+        percentualMes: (diaAtual / diasNoMes) * 100,
+        totalAtual: monthData.total
+      };
+    } catch (error) {
+      console.error('❌ Erro ao calcular projeção:', error);
+      return { projecao: 0, mediaDiaria: 0, diasRestantes: 0, percentualMes: 0 };
+    }
+  };
+
+  /**
+   * 🏆 Calcula sequência de dias sem gastos
+   */
+  const getDaysWithoutExpenses = async () => {
+    try {
+      const result = await db.getAllAsync(`
+        SELECT DISTINCT DATE(date) as data
+        FROM expenses 
+        WHERE DATE(date) >= DATE('now', '-30 days')
+        ORDER BY date DESC
+      `);
+      
+      if (!result || result.length === 0) {
+        return { 
+          diasConsecutivos: 30, 
+          recorde: 30,
+          ultimoGasto: null 
+        };
+      }
+      
+      const datasComGastos = new Set(result.map(r => r.data));
+      
+      let diasConsecutivos = 0;
+      let recorde = 0;
+      const hoje = new Date();
+      
+      for (let i = 0; i < 30; i++) {
+        const data = new Date(hoje);
+        data.setDate(data.getDate() - i);
+        const dataStr = data.toISOString().split('T')[0];
+        
+        if (!datasComGastos.has(dataStr)) {
+          diasConsecutivos++;
+        } else {
+          recorde = Math.max(recorde, diasConsecutivos);
+          if (i === 0) diasConsecutivos = 0;
+          break;
+        }
+      }
+      
+      return {
+        diasConsecutivos,
+        recorde: Math.max(recorde, diasConsecutivos),
+        ultimoGasto: result[0]?.data || null
+      };
+    } catch (error) {
+      console.error('❌ Erro ao calcular dias sem gastos:', error);
+      return { diasConsecutivos: 0, recorde: 0, ultimoGasto: null };
+    }
+  };
+
+  /**
+   * 🏪 Busca top 3 estabelecimentos com mais gastos
+   */
+  const getTopEstablishments = async () => {
+    try {
+      const result = await db.getAllAsync(`
+        SELECT 
+          est.id,
+          est.name,
+          est.category,
+          COUNT(e.id) as frequencia,
+          SUM(CAST(e.amount AS REAL)) as total,
+          AVG(CAST(e.amount AS REAL)) as ticket_medio,
+          MAX(e.date) as ultima_visita
+        FROM expenses e
+        INNER JOIN establishments est ON e.establishment_id = est.id
+        WHERE strftime('%Y-%m', e.date) = strftime('%Y-%m', 'now', 'localtime')
+        GROUP BY est.id, est.name
+        ORDER BY total DESC
+        LIMIT 3
+      `);
+      
+      if (!result || result.length === 0) {
+        return [];
+      }
+      
+      return result.map((item, index) => ({
+        ...item,
+        posicao: index + 1,
+        emoji: index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'
+      }));
+    } catch (error) {
+      console.error('❌ Erro ao buscar top estabelecimentos:', error);
+      return [];
+    }
+  };
+
+  /**
+   * ⚠️ Detecta gastos atípicos (50% acima da média)
+   */
+  const getAnomalousExpenses = async () => {
+    try {
+      const averages = await db.getAllAsync(`
+        SELECT 
+          categoryId,
+          c.name as category_name,
+          c.icon as category_icon,
+          AVG(CAST(e.amount AS REAL)) as media,
+          MAX(CAST(e.amount AS REAL)) as maximo
+        FROM expenses e
+        LEFT JOIN categories c ON e.categoryId = c.id
+        WHERE DATE(e.date) >= DATE('now', '-30 days')
+        GROUP BY categoryId
+      `);
+      
+      if (!averages || averages.length === 0) return [];
+      
+      const mediasPorCategoria = {};
+      averages.forEach(avg => {
+        mediasPorCategoria[avg.categoryId] = {
+          media: avg.media,
+          nome: avg.category_name,
+          icon: avg.category_icon
+        };
+      });
+      
+      const recentExpenses = await db.getAllAsync(`
+        SELECT 
+          e.id,
+          e.description,
+          e.amount,
+          e.categoryId,
+          e.date
+        FROM expenses e
+        WHERE DATE(e.date) >= DATE('now', '-1 day')
+        ORDER BY e.amount DESC
+      `);
+      
+      const anomalias = [];
+      recentExpenses.forEach(expense => {
+        const catInfo = mediasPorCategoria[expense.categoryId];
+        if (catInfo && expense.amount > catInfo.media * 1.5) {
+          anomalias.push({
+            ...expense,
+            categoria: catInfo.nome,
+            icon: catInfo.icon,
+            media: catInfo.media,
+            percentualAcima: ((expense.amount / catInfo.media - 1) * 100).toFixed(0)
+          });
+        }
+      });
+      
+      return anomalias.slice(0, 3);
+    } catch (error) {
+      console.error('❌ Erro ao detectar anomalias:', error);
+      return [];
+    }
+  };
+
+  /**
+   * 📅 Análise de gastos por dia da semana
+   */
+  const getWeekdayAnalysis = async () => {
+    try {
+      const result = await db.getAllAsync(`
+        SELECT 
+          CAST(strftime('%w', date) AS INTEGER) as dia_semana,
+          COUNT(*) as transacoes,
+          SUM(CAST(amount AS REAL)) as total,
+          AVG(CAST(amount AS REAL)) as media
+        FROM expenses 
+        WHERE DATE(date) >= DATE('now', '-30 days')
+        GROUP BY dia_semana
+        ORDER BY total DESC
+      `);
+      
+      if (!result || result.length === 0) return null;
+      
+      const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+      const dadosFormatados = result.map(r => ({
+        ...r,
+        nome: dias[r.dia_semana],
+        isTop: false
+      }));
+      
+      if (dadosFormatados.length > 0) {
+        dadosFormatados[0].isTop = true;
+      }
+      
+      return dadosFormatados;
+    } catch (error) {
+      console.error('❌ Erro na análise semanal:', error);
+      return null;
+    }
+  };
+
+  // 🆕 FUNÇÃO DE INSIGHTS APRIMORADA
+  const generateEnhancedInsights = (data) => {
     const insights = [];
 
-    const monthChange = data.month.total - data.previousMonth.total;
-    const monthChangePercent = data.previousMonth.total > 0 
-      ? ((monthChange / data.previousMonth.total) * 100).toFixed(1)
-      : 0;
-
-    if (monthChange > 0) {
+    // 🔴 PRIORIDADE 1: Alertas de gastos atípicos
+    if (data.anomalies && data.anomalies.length > 0) {
+      const maiorAnomalia = data.anomalies[0];
       insights.push({
-        icon: '📈',
+        icon: '⚠️',
         type: 'warning',
-        title: 'Gastos em Alta',
-        message: `Você gastou ${formatPercentage(monthChangePercent)}% mais este mês`
-      });
-    } else if (monthChange < 0) {
-      insights.push({
-        icon: '📉',
-        type: 'success',
-        title: 'Economia!',
-        message: `Você economizou ${formatPercentage(Math.abs(monthChangePercent))}% este mês`
+        title: 'Gasto Atípico Detectado',
+        message: `"${maiorAnomalia.description}" está ${maiorAnomalia.percentualAcima}% acima da média`,
+        priority: 1
       });
     }
 
-    if (data.categories.length > 0) {
-      const topCat = data.categories[0];
-      const percentage = data.month.total > 0 
-        ? ((topCat.total / data.month.total) * 100).toFixed(1)
-        : 0;
+    // 🟡 PRIORIDADE 2: Projeção de fim de mês
+    if (data.projection && data.projection.projecao > 0) {
+      const projecaoFormatada = formatCurrency(data.projection.projecao);
+      const percentualMes = data.projection.percentualMes;
       
-      if (percentage > 40) {
+      if (percentualMes < 50 && data.month.total > data.previousMonth.total * 0.5) {
         insights.push({
-          icon: topCat.icon,
+          icon: '📊',
+          type: 'warning',
+          title: 'Ritmo de Gastos Acelerado',
+          message: `Projeção: ${projecaoFormatada} (${data.projection.diasRestantes} dias restantes)`,
+          priority: 2
+        });
+      } else {
+        insights.push({
+          icon: '📈',
           type: 'info',
-          title: 'Categoria Dominante',
-          message: `${percentage}% dos gastos são em ${topCat.category}`
+          title: 'Projeção do Mês',
+          message: `Você deve gastar ${projecaoFormatada} até o fim do mês`,
+          priority: 4
         });
       }
     }
 
-    if (data.today.total === 0) {
+    // 🟢 PRIORIDADE 3: Conquistas de economia
+    if (data.daysWithout && data.daysWithout.diasConsecutivos >= 3) {
       insights.push({
-        icon: '🎯',
+        icon: '🏆',
         type: 'success',
-        title: 'Dia Sem Gastos!',
-        message: 'Parabéns! Você não gastou nada hoje'
+        title: `${data.daysWithout.diasConsecutivos} Dias Economizando!`,
+        message: data.daysWithout.diasConsecutivos >= 7 
+          ? 'Uma semana inteira! Parabéns!' 
+          : 'Continue assim, você está indo muito bem!',
+        priority: 3
       });
     }
 
-    return insights.slice(0, 3);
+    // 🔵 PRIORIDADE 4: Análise de dia da semana
+    if (data.weekday && data.weekday.length > 0) {
+      const diaMaisCaro = data.weekday[0];
+      const mediaGeral = data.weekday.reduce((sum, d) => sum + d.total, 0) / data.weekday.length;
+      
+      if (diaMaisCaro.total > mediaGeral * 1.4) {
+        insights.push({
+          icon: '📅',
+          type: 'info',
+          title: `${diaMaisCaro.nome} é seu dia mais caro`,
+          message: `Você gasta ${formatPercentage(((diaMaisCaro.total / mediaGeral - 1) * 100))}% mais neste dia`,
+          priority: 5
+        });
+      }
+    }
+
+    // 🟣 PRIORIDADE 5: Comparação mensal
+    const monthChange = data.month.total - data.previousMonth.total;
+    const monthChangePercent = data.previousMonth.total > 0 
+      ? ((monthChange / data.previousMonth.total) * 100)
+      : 0;
+
+    if (Math.abs(monthChangePercent) > 20) {
+      if (monthChange > 0) {
+        insights.push({
+          icon: '📈',
+          type: 'warning',
+          title: 'Gastos em Alta',
+          message: `+${formatPercentage(monthChangePercent)}% vs mês passado`,
+          priority: 6
+        });
+      } else {
+        insights.push({
+          icon: '📉',
+          type: 'success',
+          title: 'Excelente Economia!',
+          message: `${formatPercentage(Math.abs(monthChangePercent))}% menos que mês passado`,
+          priority: 6
+        });
+      }
+    }
+
+    return insights.sort((a, b) => a.priority - b.priority).slice(0, 5);
   };
 
   // 🎨 FUNÇÕES DE FORMATAÇÃO
@@ -518,7 +823,6 @@ export default function Dashboard() {
     return colors[index % colors.length];
   };
 
-  // 🔧 FUNÇÃO CORRIGIDA PARA FORMATAÇÃO DE DATA
   const formatDateRelative = (dateString) => {
     try {
       console.log('🔍 Formatando data:', dateString);
@@ -528,28 +832,22 @@ export default function Dashboard() {
         return 'Data inválida';
       }
 
-      // Cria data a partir da string do banco
       let date;
       
-      // Se a data contém 'T' é ISO format
       if (dateString.includes('T')) {
         date = new Date(dateString);
       } else {
-        // Se não, assume formato YYYY-MM-DD e adiciona horário local
-        const parts = dateString.split(' ')[0]; // Pega só a parte da data
+        const parts = dateString.split(' ')[0];
         date = new Date(parts + 'T00:00:00.000Z');
       }
       
-      // Verifica se a data é válida
       if (isNaN(date.getTime())) {
         console.warn('⚠️ Data inválida:', dateString);
         return 'Data inválida';
       }
       
-      // Converte para data local (remove timezone offset)
       const localDate = new Date(date.getTime() + (date.getTimezoneOffset() * 60000));
       
-      // Cria datas de comparação em horário local
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
@@ -559,7 +857,6 @@ export default function Dashboard() {
       const expenseDate = new Date(localDate);
       expenseDate.setHours(0, 0, 0, 0);
       
-      // Calcula diferença em dias
       const diffTime = today.getTime() - expenseDate.getTime();
       const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
       
@@ -572,7 +869,6 @@ export default function Dashboard() {
         diffDays
       });
 
-      // Retorna texto baseado na diferença
       if (diffDays === 0) {
         return 'Hoje';
       } else if (diffDays === 1) {
@@ -580,10 +876,8 @@ export default function Dashboard() {
       } else if (diffDays > 1 && diffDays < 7) {
         return `${diffDays} dias atrás`;
       } else if (diffDays < 0) {
-        // Data no futuro - pode acontecer por problemas de timezone
         return 'Hoje';
       } else {
-        // Mais de 7 dias - formata data completa
         return localDate.toLocaleDateString('pt-BR', {
           day: '2-digit',
           month: '2-digit',
@@ -597,7 +891,6 @@ export default function Dashboard() {
     }
   };
 
-  // 🔄 NAVEGAÇÃO SEGURA
   const safeNavigate = useCallback((screenName) => {
     try {
       if (navigation && isReady) {
@@ -608,7 +901,6 @@ export default function Dashboard() {
     }
   }, [navigation, isReady]);
 
-  // 🔄 REFRESH MANUAL
   const onRefresh = useCallback(() => {
     if (!isRefreshing) {
       loadDashboardData(true);
@@ -648,9 +940,8 @@ export default function Dashboard() {
     propsForLabels: { fontSize: 10 }
   };
 
-  // 🎭 COMPONENTE STAT CARD - CORRIGIDO PARA SEMPRE FICAR VISÍVEL
+  // 🎭 COMPONENTES EXISTENTES
   const StatCard = React.memo(({ icon, title, value, subtitle, color, index, onPress }) => {
-    // 🔧 DEBUG: Log para verificar se todos os cards estão sendo renderizados
     console.log(`🎯 Renderizando StatCard ${index}: ${title}`);
     
     return (
@@ -688,7 +979,6 @@ export default function Dashboard() {
     </TouchableOpacity>
   ));
 
-  // 🔧 COMPONENTE CORRIGIDO PARA ATIVIDADE RECENTE
   const RecentExpenseItem = React.memo(({ expense }) => {
     const formattedDate = formatDateRelative(expense.date);
     
@@ -730,6 +1020,200 @@ export default function Dashboard() {
     </View>
   ));
 
+  // ========================================
+  // 🆕 NOVOS COMPONENTES
+  // ========================================
+
+  /**
+   * 📊 Componente de Projeção Mensal
+   */
+  const MonthProjectionCard = React.memo(({ projection, monthTotal }) => {
+    if (!projection || projection.projecao === 0) return null;
+    
+    const percentualGasto = projection.totalAtual > 0 && projection.projecao > 0
+      ? (projection.totalAtual / projection.projecao) * 100
+      : 0;
+    
+    return (
+      <View style={styles.projectionCard}>
+        <View style={styles.projectionHeader}>
+          <Text style={styles.projectionTitle}>📊 Projeção do Mês</Text>
+          <Text style={styles.projectionDays}>{projection.diasRestantes} dias restantes</Text>
+        </View>
+        
+        <View style={styles.projectionValues}>
+          <View style={styles.projectionCurrent}>
+            <Text style={styles.projectionLabel}>Gasto atual</Text>
+            <Text style={styles.projectionAmount}>{formatCurrency(projection.totalAtual)}</Text>
+          </View>
+          <View style={styles.projectionArrow}>
+            <Text style={styles.projectionArrowText}>→</Text>
+          </View>
+          <View style={styles.projectionFinal}>
+            <Text style={styles.projectionLabel}>Projeção final</Text>
+            <Text style={[styles.projectionAmount, styles.projectionAmountHighlight]}>
+              {formatCurrency(projection.projecao)}
+            </Text>
+          </View>
+        </View>
+        
+        <View style={styles.projectionProgress}>
+          <View style={styles.projectionProgressBar}>
+            <View 
+              style={[
+                styles.projectionProgressFill,
+                { 
+                  width: `${Math.min(percentualGasto, 100)}%`,
+                  backgroundColor: percentualGasto > 80 ? '#EF4444' : '#10B981'
+                }
+              ]} 
+            />
+          </View>
+          <Text style={styles.projectionProgressText}>
+            {percentualGasto.toFixed(0)}% do projetado
+          </Text>
+        </View>
+        
+        <View style={styles.projectionFooter}>
+          <Text style={styles.projectionDaily}>
+            💵 Média diária: {formatCurrency(projection.mediaDiaria)}
+          </Text>
+        </View>
+      </View>
+    );
+  });
+
+  /**
+   * 🏆 Componente de Sequência de Economia
+   */
+  const EconomyStreakCard = React.memo(({ daysData }) => {
+    if (!daysData) return null;
+    
+    const getMessage = () => {
+      const dias = daysData.diasConsecutivos;
+      if (dias === 0) return "Comece hoje sua sequência!";
+      if (dias === 1) return "Primeiro dia economizando!";
+      if (dias < 7) return `${dias} dias seguidos!`;
+      if (dias < 30) return `${dias} dias! Incrível!`;
+      return `${dias} dias! Você é uma lenda!`;
+    };
+    
+    const getEmoji = () => {
+      const dias = daysData.diasConsecutivos;
+      if (dias === 0) return '🎯';
+      if (dias < 3) return '⭐';
+      if (dias < 7) return '🌟';
+      if (dias < 14) return '🏆';
+      if (dias < 30) return '👑';
+      return '🏅';
+    };
+    
+    return (
+      <View style={[
+        styles.economyCard,
+        { backgroundColor: daysData.diasConsecutivos > 0 ? '#F0FDF4' : '#FEF3C7' }
+      ]}>
+        <View style={styles.economyHeader}>
+          <Text style={styles.economyEmoji}>{getEmoji()}</Text>
+          <View style={styles.economyContent}>
+            <Text style={styles.economyTitle}>Sequência de Economia</Text>
+            <Text style={[
+              styles.economyDays,
+              { color: daysData.diasConsecutivos > 0 ? '#166534' : '#92400E' }
+            ]}>
+              {getMessage()}
+            </Text>
+          </View>
+        </View>
+        
+        {daysData.recorde > daysData.diasConsecutivos && (
+          <View style={styles.economyRecord}>
+            <Text style={styles.economyRecordText}>
+              🏅 Recorde: {daysData.recorde} dias
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  });
+
+  /**
+   * 🏪 Componente de Top Estabelecimentos
+   */
+  const TopEstablishmentsCard = React.memo(({ establishments, onViewAll }) => {
+    if (!establishments || establishments.length === 0) return null;
+    
+    return (
+      <View style={styles.topEstablishmentsCard}>
+        <View style={styles.topEstablishmentsHeader}>
+          <Text style={styles.topEstablishmentsTitle}>🏪 Top Estabelecimentos</Text>
+          <TouchableOpacity onPress={onViewAll}>
+            <Text style={styles.viewAllText}>Ver todos →</Text>
+          </TouchableOpacity>
+        </View>
+        
+        {establishments.map((place, index) => (
+          <View key={place.id} style={styles.establishmentItem}>
+            <Text style={styles.establishmentRank}>{place.emoji}</Text>
+            <View style={styles.establishmentInfo}>
+              <Text style={styles.establishmentName} numberOfLines={1}>
+                {place.name}
+              </Text>
+              <View style={styles.establishmentStats}>
+                <Text style={styles.establishmentVisits}>
+                  {place.frequencia} visita{place.frequencia !== 1 ? 's' : ''}
+                </Text>
+                <Text style={styles.establishmentAverage}>
+                  Ticket: {formatCurrency(place.ticket_medio)}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.establishmentTotal}>
+              {formatCurrency(place.total)}
+            </Text>
+          </View>
+        ))}
+      </View>
+    );
+  });
+
+  /**
+   * ⚠️ Componente de Alertas de Anomalias
+   */
+  const AnomalyAlertCard = React.memo(({ anomaly }) => {
+    if (!anomaly) return null;
+    
+    return (
+      <TouchableOpacity style={styles.anomalyCard} activeOpacity={0.8}>
+        <View style={styles.anomalyIconContainer}>
+          <Text style={styles.anomalyIcon}>⚠️</Text>
+        </View>
+        <View style={styles.anomalyContent}>
+          <Text style={styles.anomalyTitle}>Gasto Atípico Detectado</Text>
+          <Text style={styles.anomalyDescription} numberOfLines={1}>
+            {anomaly.description}
+          </Text>
+          <View style={styles.anomalyDetails}>
+            <Text style={styles.anomalyCategory}>
+              {anomaly.icon} {anomaly.categoria}
+            </Text>
+            <Text style={styles.anomalyPercentage}>
+              +{anomaly.percentualAcima}% da média
+            </Text>
+          </View>
+          <View style={styles.anomalyComparison}>
+            <Text style={styles.anomalyValue}>
+              Valor: {formatCurrency(anomaly.amount)}
+            </Text>
+            <Text style={styles.anomalyAverage}>
+              Média: {formatCurrency(anomaly.media)}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  });
+
   // 🔄 LOADING INICIAL
   if (isInitialLoading || !isReady) {
     return (
@@ -758,7 +1242,6 @@ export default function Dashboard() {
             <Text style={styles.mainSummaryValue}>
               {formatCurrency(dashboardData.monthSpending)}
             </Text>
-            {/* Indicador de dados demo */}
             {dashboardData.monthSpending === 2847.90 && (
               <Text style={styles.demoIndicator}>
                 📊 Dados de demonstração
@@ -817,7 +1300,7 @@ export default function Dashboard() {
           transform: [{ translateY: slideAnim }]
         }}>
           
-          {/* 🎯 SEÇÃO DE CARDS - ESPAÇAMENTO MÍNIMO */}
+          {/* SEÇÃO DE CARDS EXISTENTES */}
           <View style={[styles.section, { marginTop: 4, paddingTop: 1, marginBottom: 15 }]}>
             <Text style={styles.sectionTitle}>📊 Visão Geral</Text>
             <View style={styles.statsGrid}>
@@ -855,6 +1338,46 @@ export default function Dashboard() {
               />
             </View>
           </View>
+
+          {/* 🆕 SEÇÃO DE PROJEÇÃO E ECONOMIA */}
+          <View style={styles.section}>
+            <View style={styles.projectionEconomyRow}>
+              <MonthProjectionCard 
+                projection={dashboardData.monthProjection}
+                monthTotal={dashboardData.monthSpending}
+              />
+              
+              <EconomyStreakCard 
+                daysData={dashboardData.daysWithoutExpenses}
+              />
+            </View>
+          </View>
+
+          {/* 🆕 ALERTAS DE ANOMALIAS */}
+          {dashboardData.anomalousExpenses && dashboardData.anomalousExpenses.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>⚠️ Alertas</Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.anomaliesScroll}
+              >
+                {dashboardData.anomalousExpenses.map((anomaly, index) => (
+                  <AnomalyAlertCard key={anomaly.id} anomaly={anomaly} />
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* 🆕 TOP ESTABELECIMENTOS */}
+          {dashboardData.topEstablishments && dashboardData.topEstablishments.length > 0 && (
+            <View style={styles.section}>
+              <TopEstablishmentsCard 
+                establishments={dashboardData.topEstablishments}
+                onViewAll={() => safeNavigate('Estabelecimentos')}
+              />
+            </View>
+          )}
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>⚡ Ações Rápidas</Text>
@@ -940,13 +1463,31 @@ export default function Dashboard() {
             </View>
           )}
 
+          {/* 🆕 INSIGHTS APRIMORADOS */}
           {dashboardData.insights.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>💡 Insights</Text>
+              <Text style={styles.sectionTitle}>💡 Insights Inteligentes</Text>
               <View style={styles.insightsContainer}>
                 {dashboardData.insights.map((insight, index) => (
                   <InsightCard key={index} insight={insight} />
                 ))}
+                
+                {/* 🆕 Card de Análise Semanal */}
+                {dashboardData.weekdayAnalysis && dashboardData.weekdayAnalysis.length > 0 && (
+                  <View style={[
+                    styles.insightCard,
+                    { backgroundColor: '#FEF3C7', borderLeftColor: '#F59E0B' }
+                  ]}>
+                    <View style={styles.insightHeader}>
+                      <Text style={styles.insightIcon}>📅</Text>
+                      <Text style={styles.insightTitle}>Padrão Semanal</Text>
+                    </View>
+                    <Text style={styles.insightMessage}>
+                      {dashboardData.weekdayAnalysis[0].nome} é seu dia mais caro 
+                      ({formatCurrency(dashboardData.weekdayAnalysis[0].total)})
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
           )}
@@ -967,7 +1508,6 @@ export default function Dashboard() {
             </View>
           )}
 
-          {/* Empty state só aparece se não há dados reais E não há dados de demo */}
           {dashboardData.monthSpending === 0 && dashboardData.recentExpenses.length === 0 && (
             <View style={styles.emptyState}>
               <Text style={styles.emptyIcon}>💰</Text>
@@ -999,11 +1539,10 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   
-  // 🎯 HEADER COMPACTO - ESTILOS AJUSTADOS
   header: {
     backgroundColor: '#6366F1',
-    paddingTop: Platform.OS === 'ios' ? 40 : 18, // 🔥 REDUZIDO iOS: 44→40, Android: 20→18
-    paddingBottom: 6, // 🔥 REDUZIDO de 12 para 6 (mais compacto)
+    paddingTop: Platform.OS === 'ios' ? 40 : 18,
+    paddingBottom: 6,
     overflow: 'hidden',
     position: 'relative',
     elevation: 0,
@@ -1026,100 +1565,97 @@ const styles = StyleSheet.create({
     position: 'relative', 
     zIndex: 1,
     alignItems: 'center',
-    paddingVertical: 2, // 🔥 REDUZIDO de 6 para 2 (mais compacto)
+    paddingVertical: 2,
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
-    marginBottom: 4, // 🔥 REDUZIDO de 8 para 4 (mais compacto)
+    marginBottom: 4,
     paddingHorizontal: 8,
   },
   
-  // 🎯 MAIN SUMMARY COMPACTO
   mainSummary: { 
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
     width: '100%',
-    paddingVertical: 0, // 🔥 REDUZIDO de 4 para 0 (sem padding vertical)
+    paddingVertical: 0,
   },
   mainSummaryLabel: {
-    fontSize: 13, // 🔥 AUMENTADO para 13
+    fontSize: 13,
     color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: 2, // 🔥 REDUZIDO de 4 para 2 (mais compacto)
+    marginBottom: 2,
     textAlign: 'center',
     fontWeight: '700',
     letterSpacing: 0.3,
     textTransform: 'uppercase',
   },
   mainSummaryValue: {
-    fontSize: 28, // 🔥 AUMENTADO para 28
+    fontSize: 28,
     fontWeight: '900',
     color: '#FFFFFF',
-    marginBottom: 3, // 🔥 REDUZIDO de 6 para 3 (mais compacto)
+    marginBottom: 3,
     textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.4)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
     letterSpacing: -0.8,
-    lineHeight: 30, // 🔥 AUMENTADO para 30
+    lineHeight: 30,
   },
   demoIndicator: {
-    fontSize: 10, // 🔥 AUMENTADO de 9 para 10
+    fontSize: 10,
     color: 'rgba(255, 255, 255, 0.6)',
     textAlign: 'center',
     fontStyle: 'italic',
-    marginBottom: 4, // 🔥 REDUZIDO de 8 para 4 (mais compacto)
+    marginBottom: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 8, // 🔥 AUMENTADO de 6 para 8
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 4, // 🔥 AUMENTADO de 3 para 4
+    borderRadius: 4,
     alignSelf: 'center',
   },
   
-  // 🎯 COMPARAÇÃO CENTRALIZADA (sem botão refresh)
   comparisonContainer: { 
     alignItems: 'center',
-    paddingHorizontal: 18, // 🔥 AUMENTADO de 14 para 18
-    paddingVertical: 6, // 🔥 REDUZIDO de 8 para 6 (mais compacto)
-    borderRadius: 12, // 🔥 AUMENTADO de 10 para 12
-    minWidth: 280, // 🔥 AUMENTADO de 260 para 280
-    maxWidth: '85%', // 🔥 AUMENTADO de 80% para 85%
+    paddingHorizontal: 18,
+    paddingVertical: 6,
+    borderRadius: 12,
+    minWidth: 280,
+    maxWidth: '85%',
     shadowColor: 'rgba(0, 0, 0, 0.1)',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
-    marginTop: 0, // 🔥 REDUZIDO de 4 para 0 (sem margem superior)
-    alignSelf: 'center', // 🔥 NOVO: centraliza o container
+    marginTop: 0,
+    alignSelf: 'center',
   },
   comparisonRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 2, // 🔥 REDUZIDO de 4 para 2 (mais compacto)
+    marginBottom: 2,
   },
   comparisonIcon: {
-    fontSize: 14, // 🔥 AUMENTADO de 12 para 14
-    marginRight: 6, // 🔥 AUMENTADO de 5 para 6
+    fontSize: 14,
+    marginRight: 6,
   },
   comparisonText: { 
-    fontSize: 13, // 🔥 AUMENTADO de 11 para 13
+    fontSize: 13,
     color: 'rgba(255, 255, 255, 0.9)',
     fontWeight: '500',
   },
   comparisonValue: { 
-    fontSize: 18, // 🔥 AUMENTADO de 16 para 18
+    fontSize: 18,
     fontWeight: '800',
     textAlign: 'center',
-    marginBottom: 1, // 🔥 REDUZIDO de 3 para 1 (mais compacto)
+    marginBottom: 1,
   },
   comparisonDifference: {
-    fontSize: 14, // 🔥 AUMENTADO de 12 para 14
+    fontSize: 14,
     fontWeight: '700',
     textAlign: 'center',
   },
   
-  // 🎯 RESTO DOS ESTILOS PERMANECEM IGUAIS
   content: { 
     flex: 1, 
     marginTop: 0,
@@ -1140,8 +1676,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   seeAllText: { fontSize: 14, color: '#6366F1', fontWeight: '600' },
+  viewAllText: { fontSize: 14, color: '#6366F1', fontWeight: '600' },
   
-  // Stats Grid
   statsGrid: { 
     flexDirection: 'row', 
     flexWrap: 'wrap', 
@@ -1323,5 +1859,285 @@ const styles = StyleSheet.create({
     fontSize: 16, 
     color: '#6B7280',
     textAlign: 'center'
+  },
+
+  // ========================================
+  // 🆕 NOVOS ESTILOS
+  // ========================================
+  
+  // Estilos para Projeção e Economia
+  projectionEconomyRow: {
+    flexDirection: 'column',
+    gap: 12,
+  },
+
+  // 📊 Estilos do Card de Projeção
+  projectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  projectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  projectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  projectionDays: {
+    fontSize: 13,
+    color: '#6B7280',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  projectionValues: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  projectionCurrent: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  projectionArrow: {
+    paddingHorizontal: 16,
+  },
+  projectionArrowText: {
+    fontSize: 20,
+    color: '#9CA3AF',
+    fontWeight: '600',
+  },
+  projectionFinal: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  projectionLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  projectionAmount: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  projectionAmountHighlight: {
+    color: '#6366F1',
+    fontSize: 20,
+  },
+  projectionProgress: {
+    marginBottom: 12,
+  },
+  projectionProgressBar: {
+    height: 8,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  projectionProgressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  projectionProgressText: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  projectionFooter: {
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    paddingTop: 12,
+  },
+  projectionDaily: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+
+  // 🏆 Estilos do Card de Economia
+  economyCard: {
+    borderRadius: 12,
+    padding: 20,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  economyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  economyEmoji: {
+    fontSize: 32,
+    marginRight: 16,
+  },
+  economyContent: {
+    flex: 1,
+  },
+  economyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  economyDays: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  economyRecord: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#D1FAE5',
+  },
+  economyRecordText: {
+    fontSize: 14,
+    color: '#059669',
+    fontWeight: '500',
+  },
+
+  // 🏪 Estilos do Card de Top Estabelecimentos
+  topEstablishmentsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  topEstablishmentsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  topEstablishmentsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  establishmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  establishmentRank: {
+    fontSize: 24,
+    marginRight: 12,
+    width: 32,
+  },
+  establishmentInfo: {
+    flex: 1,
+  },
+  establishmentName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  establishmentStats: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  establishmentVisits: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  establishmentAverage: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  establishmentTotal: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#059669',
+  },
+
+  // ⚠️ Estilos do Card de Anomalias
+  anomaliesScroll: {
+    marginTop: 8,
+  },
+  anomalyCard: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    padding: 16,
+    marginRight: 12,
+    width: screenWidth - 64,
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+  },
+  anomalyIconContainer: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  anomalyIcon: {
+    fontSize: 24,
+  },
+  anomalyContent: {
+    flex: 1,
+  },
+  anomalyTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#B91C1C',
+    marginBottom: 4,
+  },
+  anomalyDescription: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  anomalyDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  anomalyCategory: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  anomalyPercentage: {
+    fontSize: 13,
+    color: '#DC2626',
+    fontWeight: '600',
+  },
+  anomalyComparison: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  anomalyValue: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '600',
+  },
+  anomalyAverage: {
+    fontSize: 14,
+    color: '#6B7280',
   },
 });
