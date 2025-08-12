@@ -1,8 +1,6 @@
 # 💰 Controle Financeiro
 
-Um aplicativo completo de controle financeiro pessoal desenvolvido com React
-Native e Expo, oferecendo gestão inteligente de despesas com recursos avançados
-de análise e relatórios.
+Um aplicativo moderno de controle financeiro pessoal desenvolvido com React Native e Expo, apresentando design inspirado no Nubank com sistema de autenticação seguro, gestão inteligente de despesas e análises avançadas.
 
 ## 📱 Funcionalidades
 
@@ -15,19 +13,20 @@ de análise e relatórios.
 
 ### 💸 **Gerenciamento de Despesas**
 
-- CRUD completo de despesas
-- Categorização personalizada
-- Múltiplos métodos de pagamento
-- Associação com estabelecimentos
-- Localização GPS automática
+- CRUD completo de despesas com validações robustas
+- Categorização personalizada com ícones
+- Múltiplos métodos de pagamento (45+ ícones disponíveis)
+- Associação com estabelecimentos e categorias
+- Localização GPS automática com geocoding reverso
+- Sistema de relacionamento N:N entre estabelecimentos e categorias
 
 ### 📊 **Dashboard Inteligente**
 
-- Resumos por período (hoje, semana, mês, ano)
-- Gráficos visuais interativos
-- Insights automáticos
-- Detecção de anomalias de gastos
+- Resumos por período (hoje, semana, mês, ano) com design Nubank
+- Gráficos visuais interativos com cores padronizadas
+- Insights automáticos e detecção de anomalias
 - Estabelecimentos mais visitados
+- Cards informativos com gradientes e sombras elegantes
 
 ### 📈 **Relatórios e Análises**
 
@@ -37,23 +36,28 @@ de análise e relatórios.
 - Projeções de gastos
 - Exportação de dados
 
-### 🏪 **Gerenciamento de Locais**
+### 🏪 **Gerenciamento Avançado**
 
-- Cadastro de estabelecimentos
-- Localização GPS automática
-- Geocoding reverso
-- Histórico de visitas
+- **Estabelecimentos**: Cadastro completo com localização GPS
+- **Categorias de Estabelecimentos**: Sistema dedicado com 70+ ícones categorizados
+- **Formas de Pagamento**: 45+ ícones organizados por tipo
+- **Relacionamentos N:N**: Estabelecimentos podem ter múltiplas categorias
+- **Formulários com Prévia**: Visualização em tempo real durante criação/edição
+- **Pesquisa Inteligente**: Busca em todos os campos com sugestões
+- **Validações Completas**: Verificação de duplicatas e dependências
 
 ## 🛠️ Tecnologias Utilizadas
 
 - **React Native** - Framework mobile multiplataforma
-- **Expo** - Plataforma de desenvolvimento
-- **SQLite** - Banco de dados local
-- **React Navigation** - Navegação entre telas
-- **AsyncStorage** - Armazenamento persistente
-- **Expo Location** - Serviços de geolocalização
-- **React Native Chart Kit** - Gráficos e visualizações
-- **bcrypt** - Criptografia de senhas
+- **Expo** - Plataforma de desenvolvimento e build
+- **SQLite** - Banco de dados local com migrações automáticas
+- **React Navigation v7** - Navegação com drawer customizado
+- **AsyncStorage** - Armazenamento persistente de sessões
+- **Expo Location** - Serviços de geolocalização e geocoding
+- **React Native Chart Kit** - Gráficos com tema Nubank
+- **Expo Linear Gradient** - Gradientes nos headers e cards
+- **MaterialCommunityIcons** - Ícones consistentes
+- **bcrypt** - Criptografia robusta de senhas
 
 ## 🚀 Como Executar
 
@@ -94,28 +98,40 @@ de análise e relatórios.
 
 ```
 controle-financeiro/
-├── components/           # Componentes reutilizáveis
-│   ├── Dashboard.js     # Dashboard principal
+├── components/           # Componentes com Design System Nubank
+│   ├── Dashboard.js     # Dashboard principal com gradientes
 │   ├── ExpenseManager.js # Gerenciador de despesas
 │   ├── CategoryManager.js # Gerenciador de categorias
+│   ├── EstablishmentManager.js # Gerenciador de estabelecimentos
+│   ├── EstablishmentCategoryManager.js # Categorias de estabelecimentos
+│   ├── PaymentMethodManager.js # Formas de pagamento padronizado
+│   ├── ModalForm.js     # Formulário modal reutilizável
+│   ├── *FormWithPreview.js # Formulários com prévia em tempo real
+│   ├── DatabaseInitializer.js # Migrações automáticas
 │   └── ...
-├── screens/             # Telas de navegação
-│   ├── LoginScreen.js   # Tela de login
-│   ├── RegisterScreen.js # Tela de registro
+├── screens/             # Telas de autenticação
+│   ├── LoginScreen.js   # Login com tema Nubank
+│   ├── RegisterScreen.js # Registro com validações
 │   └── ProfileScreen.js # Perfil do usuário
-├── services/            # Serviços e contextos
-│   ├── AuthContext.js   # Contexto de autenticação
-│   ├── CacheService.js  # Sistema de cache
-│   └── ...
-├── utils/               # Utilitários e helpers
-│   ├── helpers.js       # Funções auxiliares
-│   ├── crypto.js        # Criptografia
-│   └── validationUtils.js # Validações
+├── services/            # Serviços avançados
+│   ├── AuthContext.js   # Contexto de autenticação com bcrypt
+│   ├── CacheService.js  # Sistema de cache multicamadas
+│   ├── EventEmitter.js  # Comunicação entre componentes
+│   └── TransactionService.js # Transações de banco
+├── utils/               # Utilitários robustos
+│   ├── crypto.js        # Criptografia bcrypt
+│   ├── validation.js    # Sistema de validação avançado
+│   ├── errorHandler.js  # Tratamento padronizado de erros
+│   ├── logger.js        # Sistema de logs estruturados
+│   └── MemoryMonitor.js # Monitoramento de performance
+├── constants/           # Design System
+│   └── nubank-theme.js  # Tema Nubank completo
 ├── hooks/               # Hooks customizados
-│   ├── useCachedQuery.js # Cache de queries
+│   ├── useCachedQuery.js # Cache inteligente
+│   ├── useDatabaseSafety.js # Segurança de banco
 │   └── ...
-└── navigation/          # Configuração de navegação
-    └── DrawerNavigator.js
+└── navigation/          # Navegação customizada
+    └── DrawerNavigator.js # Drawer com tema Nubank
 ```
 
 ## 🔧 Scripts Disponíveis
@@ -146,19 +162,26 @@ npm run format     # Formata código com Prettier
 - Queries otimizadas com índices
 - Lazy loading de dados
 
-### 🎨 **Interface**
+### 🎨 **Design System Nubank**
 
-- Design system consistente
-- Animações suaves
-- Feedback visual adequado
-- Totalmente em português brasileiro
+- **Tema Unificado**: Cores, espaçamentos e tipografia inspirados no Nubank
+- **Componentes Padronizados**: Headers, cards, botões e formulários consistentes
+- **Formulários com Prévia**: Visualização em tempo real durante edição
+- **45+ Ícones de Pagamento**: Organizados por categoria (principais, secundários, coloridos)
+- **70+ Ícones de Estabelecimento**: Categorizados (alimentação, saúde, comércio, etc.)
+- **Gradientes e Sombras**: Elementos visuais elegantes
+- **Feedback Visual**: Estados de loading, erro e sucesso
+- **Totalmente em Português**: Interface 100% em pt-BR
 
-### 💾 **Dados**
+### 💾 **Arquitetura de Dados**
 
-- Banco SQLite local
-- Sistema de migração automática
-- Backup e restauração
-- Transações ACID
+- **SQLite** com sistema de migração versionado (2.0.0 → 2.3.0)
+- **Relacionamentos N:N** entre estabelecimentos e categorias
+- **Isolamento por Usuário**: Todas as queries filtradas por user_id
+- **Transações ACID** com rollback automático
+- **Índices Otimizados** para performance
+- **Validação de Integridade**: Foreign keys e constraints
+- **Migração Automática** de senhas para bcrypt
 
 ## 🧪 Testes
 
@@ -183,16 +206,29 @@ npm run test:watch # Executa testes em modo watch
 Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais
 detalhes.
 
+## ✅ Funcionalidades Recentes
+
+- ✅ **Sistema de Design Nubank Completo**
+- ✅ **Formulários com Prévia em Tempo Real**
+- ✅ **45+ Ícones para Formas de Pagamento**
+- ✅ **70+ Ícones Categorizados para Estabelecimentos**
+- ✅ **Relacionamento N:N Estabelecimentos ↔ Categorias**
+- ✅ **Padronização Completa de Componentes**
+- ✅ **Sistema de Validação Robusto**
+- ✅ **Cache Inteligente Multicamadas**
+- ✅ **Migrações Automáticas de Banco**
+- ✅ **Autenticação Segura com bcrypt**
+
 ## 🎯 Próximas Funcionalidades
 
 - [ ] Sincronização em nuvem
-- [ ] Backup automático
-- [ ] Metas de gastos
-- [ ] Notificações push
-- [ ] Importação de dados bancários
-- [ ] Relatórios em PDF
-- [ ] Modo escuro
-- [ ] Múltiplas moedas
+- [ ] Metas de gastos personalizadas
+- [ ] Notificações push inteligentes
+- [ ] Importação de extratos bancários
+- [ ] Relatórios em PDF com gráficos
+- [ ] Modo escuro alternativo
+- [ ] Suporte a múltiplas moedas
+- [ ] Widget para tela inicial
 
 ## 📞 Suporte
 
@@ -201,4 +237,17 @@ Se você encontrar algum problema ou tiver sugestões, por favor abra uma
 
 ---
 
-**Desenvolvido com ❤️ usando React Native e Expo**
+## 🎨 Design System
+
+Este projeto implementa um design system completo inspirado no Nubank:
+
+- **Cores**: Roxo primário (#820AD1), gradientes e cores de status
+- **Tipografia**: Pesos e tamanhos padronizados
+- **Espaçamento**: Sistema de spacing consistente (4px, 8px, 16px, 24px, 32px, 48px)
+- **Componentes**: Botões, inputs, cards e modais reutilizáveis
+- **Ícones**: MaterialCommunityIcons com emojis complementares
+- **Sombras**: Sistema de elevação em múltiplas camadas
+
+---
+
+**Desenvolvido com ❤️ usando React Native, Expo e Design System Nubank**
