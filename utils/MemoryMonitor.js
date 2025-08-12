@@ -49,9 +49,9 @@ class MemoryMonitor {
       eventListeners: eventEmitter.getEventInfo(),
       memoryUsage: global.performance?.memory
         ? {
-            used: (global.performance.memory.usedJSHeapSize / 1048576).toFixed(2) + 'MB',
-            total: (global.performance.memory.totalJSHeapSize / 1048576).toFixed(2) + 'MB'
-          }
+          used: (global.performance.memory.usedJSHeapSize / 1048576).toFixed(2) + 'MB',
+          total: (global.performance.memory.totalJSHeapSize / 1048576).toFixed(2) + 'MB'
+        }
         : 'Não disponível'
     };
   }

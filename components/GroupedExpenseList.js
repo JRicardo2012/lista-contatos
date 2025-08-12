@@ -257,9 +257,9 @@ const GroupedExpenseList = () => {
 
         console.log('✅ Processamento concluído:');
         console.log(`   - ${validExpenses} despesas válidas`);
-        console.log(`   - 7 dias processados`);
+        console.log('   - 7 dias processados');
         console.log(
-          `   - Dias com gastos:`,
+          '   - Dias com gastos:',
           Object.keys(grouped).filter(day => grouped[day] && !grouped[day].isEmpty)
         );
         console.log(`   - Total: R$ ${total.toFixed(2)}`);

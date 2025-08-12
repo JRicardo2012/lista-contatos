@@ -564,12 +564,12 @@ export default function AnnualExpenseSummary() {
       averagePerTransaction: statsData?.averagePerTransaction || 0,
       biggestExpense: biggestExpenseData
         ? {
-            description: biggestExpenseData.description,
-            amount: biggestExpenseData.amount,
-            date: biggestExpenseData.date,
-            category: biggestExpenseData.category,
-            categoryIcon: biggestExpenseData.categoryIcon
-          }
+          description: biggestExpenseData.description,
+          amount: biggestExpenseData.amount,
+          date: biggestExpenseData.date,
+          category: biggestExpenseData.category,
+          categoryIcon: biggestExpenseData.categoryIcon
+        }
         : null,
       mostActiveMonth,
       smallestExpense: statsData?.smallestExpense || 0,
@@ -587,16 +587,16 @@ export default function AnnualExpenseSummary() {
 
   function getQuarterMonths(quarter) {
     switch (quarter) {
-      case 'Q1':
-        return 'Jan-Mar';
-      case 'Q2':
-        return 'Abr-Jun';
-      case 'Q3':
-        return 'Jul-Set';
-      case 'Q4':
-        return 'Out-Dez';
-      default:
-        return '';
+    case 'Q1':
+      return 'Jan-Mar';
+    case 'Q2':
+      return 'Abr-Jun';
+    case 'Q3':
+      return 'Jul-Set';
+    case 'Q4':
+      return 'Out-Dez';
+    default:
+      return '';
     }
   }
 
@@ -786,9 +786,9 @@ export default function AnnualExpenseSummary() {
 
     let report = `📊 RELATÓRIO ANUAL DE DESPESAS - ${selectedYear}\n`;
     report += `${user?.name || 'Usuário'}\n\n`;
-    report += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    report += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
 
-    report += `💰 RESUMO GERAL\n`;
+    report += '💰 RESUMO GERAL\n';
     report += `Total de Gastos: ${formatCurrency(totalAmount)}\n`;
     report += `Total de Transações: ${formatNumber(totalTransactions)}\n`;
     report += `Média por Transação: ${formatCurrency(totalAmount / totalTransactions)}\n`;
@@ -796,24 +796,24 @@ export default function AnnualExpenseSummary() {
     report += `Média Mensal: ${formatCurrency(annualData.averageMonthly)}\n\n`;
 
     if (yearComparison.previousYear > 0) {
-      report += `📈 COMPARAÇÃO COM ANO ANTERIOR\n`;
+      report += '📈 COMPARAÇÃO COM ANO ANTERIOR\n';
       report += `${selectedYear - 1}: ${formatCurrency(yearComparison.previousYear)}\n`;
       report += `Variação: ${yearComparison.percentageChange > 0 ? '+' : ''}${formatPercentage(yearComparison.percentageChange)}\n\n`;
     }
 
-    report += `📂 GASTOS POR CATEGORIA\n`;
+    report += '📂 GASTOS POR CATEGORIA\n';
     totalByCategory.slice(0, 10).forEach((cat, index) => {
       report += `${index + 1}. ${cat.icon} ${cat.name}: ${formatCurrency(cat.amount)} (${formatPercentage(cat.percentage)})\n`;
     });
     report += '\n';
 
-    report += `📅 GASTOS POR TRIMESTRE\n`;
+    report += '📅 GASTOS POR TRIMESTRE\n';
     quarterlyData.forEach(q => {
       report += `${q.name}: ${formatCurrency(q.amount)}\n`;
     });
     report += '\n';
 
-    report += `📊 GASTOS MENSAIS\n`;
+    report += '📊 GASTOS MENSAIS\n';
     monthlyData.forEach(m => {
       if (m.amount > 0) {
         report += `${m.month}: ${formatCurrency(m.amount)}\n`;
@@ -822,15 +822,15 @@ export default function AnnualExpenseSummary() {
     report += '\n';
 
     if (insights.length > 0) {
-      report += `💡 INSIGHTS\n`;
+      report += '💡 INSIGHTS\n';
       insights.forEach(insight => {
         report += `${insight.icon} ${insight.description}\n`;
       });
     }
 
-    report += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    report += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
     report += `Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}\n`;
-    report += `App Controle Financeiro`;
+    report += 'App Controle Financeiro';
 
     return report;
   };
@@ -1469,26 +1469,26 @@ export default function AnnualExpenseSummary() {
           {/* Métodos de Pagamento */}
           {annualData.paymentMethodsDistribution &&
             annualData.paymentMethodsDistribution.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>💳 Formas de Pagamento</Text>
-                <View style={styles.paymentMethodsList}>
-                  {annualData.paymentMethodsDistribution.map((method, index) => (
-                    <View key={index} style={styles.paymentMethodCard}>
-                      <View style={styles.paymentMethodIcon}>
-                        <Text>{method.icon}</Text>
-                      </View>
-                      <View style={styles.paymentMethodInfo}>
-                        <Text style={styles.paymentMethodName}>{method.method}</Text>
-                        <Text style={styles.paymentMethodStats}>
-                          {method.count} transações • {formatPercentage(method.percentage)}
-                        </Text>
-                      </View>
-                      <Text style={styles.paymentMethodAmount}>{formatCurrency(method.total)}</Text>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>💳 Formas de Pagamento</Text>
+              <View style={styles.paymentMethodsList}>
+                {annualData.paymentMethodsDistribution.map((method, index) => (
+                  <View key={index} style={styles.paymentMethodCard}>
+                    <View style={styles.paymentMethodIcon}>
+                      <Text>{method.icon}</Text>
                     </View>
-                  ))}
-                </View>
+                    <View style={styles.paymentMethodInfo}>
+                      <Text style={styles.paymentMethodName}>{method.method}</Text>
+                      <Text style={styles.paymentMethodStats}>
+                        {method.count} transações • {formatPercentage(method.percentage)}
+                      </Text>
+                    </View>
+                    <Text style={styles.paymentMethodAmount}>{formatCurrency(method.total)}</Text>
+                  </View>
+                ))}
               </View>
-            )}
+            </View>
+          )}
 
           {/* Ranking de Estabelecimentos */}
           {annualData.establishmentRanking && annualData.establishmentRanking.length > 0 && (

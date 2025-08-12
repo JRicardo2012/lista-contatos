@@ -287,24 +287,24 @@ export class SchemaValidator {
    */
   static validateType(value, type) {
     switch (type) {
-      case 'string':
-        return typeof value === 'string';
-      case 'number':
-        return TypeValidator.isValidNumber(value);
-      case 'email':
-        return TypeValidator.isValidEmail(value);
-      case 'password':
-        return TypeValidator.isValidPassword(value);
-      case 'currency':
-        return TypeValidator.isValidCurrency(value);
-      case 'date':
-        return TypeValidator.isValidDate(value);
-      case 'array':
-        return Array.isArray(value);
-      case 'object':
-        return TypeValidator.isValidObject(value);
-      default:
-        return true;
+    case 'string':
+      return typeof value === 'string';
+    case 'number':
+      return TypeValidator.isValidNumber(value);
+    case 'email':
+      return TypeValidator.isValidEmail(value);
+    case 'password':
+      return TypeValidator.isValidPassword(value);
+    case 'currency':
+      return TypeValidator.isValidCurrency(value);
+    case 'date':
+      return TypeValidator.isValidDate(value);
+    case 'array':
+      return Array.isArray(value);
+    case 'object':
+      return TypeValidator.isValidObject(value);
+    default:
+      return true;
     }
   }
 
@@ -315,18 +315,18 @@ export class SchemaValidator {
     if (rules.sanitize === false) return value;
 
     switch (rules.type) {
-      case 'string':
-        return DataSanitizer.sanitizeString(value);
-      case 'email':
-        return DataSanitizer.sanitizeEmail(value);
-      case 'currency':
-        return DataSanitizer.sanitizeCurrency(value);
-      case 'phone':
-        return DataSanitizer.sanitizePhone(value);
-      case 'date':
-        return DataSanitizer.sanitizeDate(value);
-      default:
-        return value;
+    case 'string':
+      return DataSanitizer.sanitizeString(value);
+    case 'email':
+      return DataSanitizer.sanitizeEmail(value);
+    case 'currency':
+      return DataSanitizer.sanitizeCurrency(value);
+    case 'phone':
+      return DataSanitizer.sanitizePhone(value);
+    case 'date':
+      return DataSanitizer.sanitizeDate(value);
+    default:
+      return value;
     }
   }
 }

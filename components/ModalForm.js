@@ -170,87 +170,155 @@ export default function ModalForm({
     const hasError = touched[field.name] && errors[field.name];
 
     switch (field.type) {
-      case 'text':
-      case 'email':
-      case 'number':
-      case 'password':
-        return (
-          <View key={field.name} style={styles.fieldContainer}>
-            <Text style={styles.label}>
-              {field.label}
-              {validationRules[field.name]?.required && (
-                <Text style={styles.required}> *</Text>
-              )}
-            </Text>
+    case 'text':
+    case 'email':
+    case 'number':
+    case 'password':
+      return (
+        <View key={field.name} style={styles.fieldContainer}>
+          <Text style={styles.label}>
+            {field.label}
+            {validationRules[field.name]?.required && (
+              <Text style={styles.required}> *</Text>
+            )}
+          </Text>
             
-            <View style={[styles.inputWrapper, hasError && styles.inputError]}>
-              {field.icon && (
-                <MaterialCommunityIcons
-                  name={field.icon}
-                  size={20}
-                  color={hasError ? NUBANK_COLORS.ERROR : NUBANK_COLORS.TEXT_SECONDARY}
-                  style={styles.inputIcon}
-                />
-              )}
-              
-              <TextInput
-                style={[styles.input, field.icon && styles.inputWithIcon]}
-                value={formData[field.name] || ''}
-                onChangeText={(value) => handleFieldChange(field.name, value)}
-                onBlur={() => handleFieldBlur(field.name)}
-                placeholder={field.placeholder}
-                placeholderTextColor={NUBANK_COLORS.TEXT_TERTIARY}
-                keyboardType={field.keyboardType || 'default'}
-                secureTextEntry={field.type === 'password'}
-                autoCapitalize={field.autoCapitalize || 'sentences'}
-                autoCorrect={field.autoCorrect !== false}
-                editable={!field.disabled && !isSubmitting}
-                maxLength={field.maxLength}
-                multiline={field.multiline}
-                numberOfLines={field.numberOfLines}
+          <View style={[styles.inputWrapper, hasError && styles.inputError]}>
+            {field.icon && (
+              <MaterialCommunityIcons
+                name={field.icon}
+                size={20}
+                color={hasError ? NUBANK_COLORS.ERROR : NUBANK_COLORS.TEXT_SECONDARY}
+                style={styles.inputIcon}
               />
-            </View>
-            
-            {hasError && (
-              <Animated.View style={styles.errorContainer}>
-                <MaterialCommunityIcons
-                  name="alert-circle"
-                  size={14}
-                  color={NUBANK_COLORS.ERROR}
-                />
-                <Text style={styles.errorText}>{errors[field.name]}</Text>
-              </Animated.View>
             )}
-            
-            {field.helper && !hasError && (
-              <Text style={styles.helperText}>{field.helper}</Text>
-            )}
+              
+            <TextInput
+              style={[styles.input, field.icon && styles.inputWithIcon]}
+              value={formData[field.name] || ''}
+              onChangeText={(value) => handleFieldChange(field.name, value)}
+              onBlur={() => handleFieldBlur(field.name)}
+              placeholder={field.placeholder}
+              placeholderTextColor={NUBANK_COLORS.TEXT_TERTIARY}
+              keyboardType={field.keyboardType || 'default'}
+              secureTextEntry={field.type === 'password'}
+              autoCapitalize={field.autoCapitalize || 'sentences'}
+              autoCorrect={field.autoCorrect !== false}
+              editable={!field.disabled && !isSubmitting}
+              maxLength={field.maxLength}
+              multiline={field.multiline}
+              numberOfLines={field.numberOfLines}
+            />
           </View>
-        );
-
-      case 'select':
-        return (
-          <View key={field.name} style={styles.fieldContainer}>
-            <Text style={styles.label}>
-              {field.label}
-              {validationRules[field.name]?.required && (
-                <Text style={styles.required}> *</Text>
-              )}
-            </Text>
             
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.selectContainer}
-            >
-              {field.options.map(option => (
+          {hasError && (
+            <Animated.View style={styles.errorContainer}>
+              <MaterialCommunityIcons
+                name="alert-circle"
+                size={14}
+                color={NUBANK_COLORS.ERROR}
+              />
+              <Text style={styles.errorText}>{errors[field.name]}</Text>
+            </Animated.View>
+          )}
+            
+          {field.helper && !hasError && (
+            <Text style={styles.helperText}>{field.helper}</Text>
+          )}
+        </View>
+      );
+
+    case 'select':
+      return (
+        <View key={field.name} style={styles.fieldContainer}>
+          <Text style={styles.label}>
+            {field.label}
+            {validationRules[field.name]?.required && (
+              <Text style={styles.required}> *</Text>
+            )}
+          </Text>
+            
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.selectContainer}
+          >
+            {field.options.map(option => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.selectOption,
+                  formData[field.name] === option.value && styles.selectOptionActive
+                ]}
+                onPress={() => handleFieldChange(field.name, option.value)}
+                disabled={isSubmitting}
+              >
+                {option.icon && (
+                  <Text style={styles.selectOptionIcon}>
+                    {option.icon}
+                  </Text>
+                )}
+                <Text
+                  style={[
+                    styles.selectOptionText,
+                    formData[field.name] === option.value && styles.selectOptionTextActive
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+            
+          {hasError && (
+            <Animated.View style={styles.errorContainer}>
+              <MaterialCommunityIcons
+                name="alert-circle"
+                size={14}
+                color={NUBANK_COLORS.ERROR}
+              />
+              <Text style={styles.errorText}>{errors[field.name]}</Text>
+            </Animated.View>
+          )}
+        </View>
+      );
+
+    case 'multiselect':
+      return (
+        <View key={field.name} style={styles.fieldContainer}>
+          <Text style={styles.label}>
+            {field.label}
+            {validationRules[field.name]?.required && (
+              <Text style={styles.required}> *</Text>
+            )}
+          </Text>
+            
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.selectContainer}
+          >
+            {field.options.map(option => {
+              const isSelected = (formData[field.name] || []).includes(option.value);
+              return (
                 <TouchableOpacity
                   key={option.value}
                   style={[
                     styles.selectOption,
-                    formData[field.name] === option.value && styles.selectOptionActive
+                    isSelected && styles.selectOptionActive
                   ]}
-                  onPress={() => handleFieldChange(field.name, option.value)}
+                  onPress={() => {
+                    const currentValues = formData[field.name] || [];
+                    let newValues;
+                    if (isSelected) {
+                      // Remove se já selecionado
+                      newValues = currentValues.filter(val => val !== option.value);
+                    } else {
+                      // Adiciona se não selecionado
+                      newValues = [...currentValues, option.value];
+                    }
+                    handleFieldChange(field.name, newValues);
+                  }}
                   disabled={isSubmitting}
                 >
                   {option.icon && (
@@ -261,140 +329,72 @@ export default function ModalForm({
                   <Text
                     style={[
                       styles.selectOptionText,
-                      formData[field.name] === option.value && styles.selectOptionTextActive
+                      isSelected && styles.selectOptionTextActive
                     ]}
                   >
                     {option.label}
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+              );
+            })}
+          </ScrollView>
             
-            {hasError && (
-              <Animated.View style={styles.errorContainer}>
-                <MaterialCommunityIcons
-                  name="alert-circle"
-                  size={14}
-                  color={NUBANK_COLORS.ERROR}
-                />
-                <Text style={styles.errorText}>{errors[field.name]}</Text>
-              </Animated.View>
-            )}
-          </View>
-        );
-
-      case 'multiselect':
-        return (
-          <View key={field.name} style={styles.fieldContainer}>
-            <Text style={styles.label}>
-              {field.label}
-              {validationRules[field.name]?.required && (
-                <Text style={styles.required}> *</Text>
-              )}
-            </Text>
-            
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.selectContainer}
-            >
-              {field.options.map(option => {
-                const isSelected = (formData[field.name] || []).includes(option.value);
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[
-                      styles.selectOption,
-                      isSelected && styles.selectOptionActive
-                    ]}
-                    onPress={() => {
-                      const currentValues = formData[field.name] || [];
-                      let newValues;
-                      if (isSelected) {
-                        // Remove se já selecionado
-                        newValues = currentValues.filter(val => val !== option.value);
-                      } else {
-                        // Adiciona se não selecionado
-                        newValues = [...currentValues, option.value];
-                      }
-                      handleFieldChange(field.name, newValues);
-                    }}
-                    disabled={isSubmitting}
-                  >
-                    {option.icon && (
-                      <Text style={styles.selectOptionIcon}>
-                        {option.icon}
-                      </Text>
-                    )}
-                    <Text
-                      style={[
-                        styles.selectOptionText,
-                        isSelected && styles.selectOptionTextActive
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            
-            {hasError && (
-              <Animated.View style={styles.errorContainer}>
-                <MaterialCommunityIcons
-                  name="alert-circle"
-                  size={14}
-                  color={NUBANK_COLORS.ERROR}
-                />
-                <Text style={styles.errorText}>{errors[field.name]}</Text>
-              </Animated.View>
-            )}
-          </View>
-        );
-
-      case 'switch':
-        return (
-          <TouchableOpacity
-            key={field.name}
-            style={styles.switchContainer}
-            onPress={() => handleFieldChange(field.name, !formData[field.name])}
-            disabled={isSubmitting}
-          >
-            <View style={styles.switchLeft}>
-              {field.icon && (
-                <MaterialCommunityIcons
-                  name={field.icon}
-                  size={24}
-                  color={NUBANK_COLORS.PRIMARY}
-                  style={styles.switchIcon}
-                />
-              )}
-              <View>
-                <Text style={styles.switchLabel}>{field.label}</Text>
-                {field.description && (
-                  <Text style={styles.switchDescription}>{field.description}</Text>
-                )}
-              </View>
-            </View>
-            
-            <View
-              style={[
-                styles.switch,
-                formData[field.name] && styles.switchActive
-              ]}
-            >
-              <Animated.View
-                style={[
-                  styles.switchThumb,
-                  formData[field.name] && styles.switchThumbActive
-                ]}
+          {hasError && (
+            <Animated.View style={styles.errorContainer}>
+              <MaterialCommunityIcons
+                name="alert-circle"
+                size={14}
+                color={NUBANK_COLORS.ERROR}
               />
-            </View>
-          </TouchableOpacity>
-        );
+              <Text style={styles.errorText}>{errors[field.name]}</Text>
+            </Animated.View>
+          )}
+        </View>
+      );
 
-      default:
-        return null;
+    case 'switch':
+      return (
+        <TouchableOpacity
+          key={field.name}
+          style={styles.switchContainer}
+          onPress={() => handleFieldChange(field.name, !formData[field.name])}
+          disabled={isSubmitting}
+        >
+          <View style={styles.switchLeft}>
+            {field.icon && (
+              <MaterialCommunityIcons
+                name={field.icon}
+                size={24}
+                color={NUBANK_COLORS.PRIMARY}
+                style={styles.switchIcon}
+              />
+            )}
+            <View>
+              <Text style={styles.switchLabel}>{field.label}</Text>
+              {field.description && (
+                <Text style={styles.switchDescription}>{field.description}</Text>
+              )}
+            </View>
+          </View>
+            
+          <View
+            style={[
+              styles.switch,
+              formData[field.name] && styles.switchActive
+            ]}
+          >
+            <Animated.View
+              style={[
+                styles.switchThumb,
+                formData[field.name] && styles.switchThumbActive
+              ]}
+            />
+          </View>
+        </TouchableOpacity>
+      );
+
+    default:
+      return null;
     }
   };
 

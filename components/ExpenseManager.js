@@ -1,5 +1,5 @@
-// components/ExpenseManager.js - DESIGN NUBANK
-import React, { useState, useEffect, useCallback } from 'react';
+// components/ExpenseManager.js - DESIGN NUBANK COM ANIMAÇÕES
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,9 @@ import {
   ScrollView,
   StatusBar,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Animated,
+  Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +24,22 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../services/AuthContext';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import {
+  FadeInView,
+  SlideInView,
+  ScaleButton,
+  AnimatedCard,
+  FloatingActionButton,
+  SkeletonLoader
+} from './AnimatedComponents';
+import {
+  Chip,
+  ChipGroup,
+  SearchBar,
+  LoadingOverlay,
+  EmptyState
+} from './UIComponents';
 import {
   NUBANK_COLORS,
   NUBANK_SPACING,
@@ -30,6 +48,8 @@ import {
   NUBANK_SHADOWS,
   NUBANK_FONT_WEIGHTS
 } from '../constants/nubank-theme';
+
+const { width: screenWidth } = Dimensions.get('window');
 
 export default function ExpenseManager({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -49,10 +69,16 @@ export default function ExpenseManager({ navigation }) {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredExpenses, setFilteredExpenses] = useState([]);
 
   // Estados para listas de seleção
   const [categories, setCategories] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
+
+  // Refs para animações
+  const modalSlideAnim = useRef(new Animated.Value(screenWidth)).current;
+  const deleteAnimations = useRef({});
 
   // Carrega despesas na montagem
   useEffect(() => {
@@ -112,6 +138,7 @@ export default function ExpenseManager({ navigation }) {
         );
 
         setExpenses(results || []);
+        setFilteredExpenses(results || []);
         console.log(`✅ ${results?.length || 0} despesas carregadas`);
       } catch (error) {
         console.error('❌ Erro ao carregar despesas:', error);
@@ -159,6 +186,22 @@ export default function ExpenseManager({ navigation }) {
   const handleRefresh = useCallback(() => {
     loadExpenses(true);
   }, [loadExpenses]);
+
+  // Função de busca
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredExpenses(expenses);
+    } else {
+      const query = searchQuery.toLowerCase();
+      const filtered = expenses.filter(expense => 
+        expense.description?.toLowerCase().includes(query) ||
+        expense.categoryName?.toLowerCase().includes(query) ||
+        expense.paymentMethodName?.toLowerCase().includes(query) ||
+        formatCurrency(expense.amount).includes(query)
+      );
+      setFilteredExpenses(filtered);
+    }
+  }, [searchQuery, expenses]);
 
   const openNewExpense = () => {
     setEditingExpense(null);
@@ -256,6 +299,10 @@ export default function ExpenseManager({ navigation }) {
   };
 
   const handleDelete = expense => {
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    
     Alert.alert('Confirmar Exclusão', `Deseja excluir a despesa "${expense.description}"?`, [
       { text: 'Cancelar', style: 'cancel' },
       {
@@ -275,6 +322,10 @@ export default function ExpenseManager({ navigation }) {
             if (global.expenseListeners) {
               global.expenseListeners.forEach(listener => listener());
             }
+            
+            if (Platform.OS === 'ios') {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
           } catch (error) {
             console.error('❌ Erro ao excluir despesa:', error);
             Alert.alert('Erro', 'Não foi possível excluir a despesa', [{ text: 'Entendi' }]);
@@ -284,66 +335,89 @@ export default function ExpenseManager({ navigation }) {
     ]);
   };
 
-  const renderExpenseItem = ({ item }) => (
-    <TouchableOpacity style={styles.expenseCard} onPress={() => openEditExpense(item)}>
-      <View style={styles.expenseLeft}>
-        <View style={styles.expenseIcon}>
-          <Text style={styles.categoryIcon}>{item.categoryIcon || '💰'}</Text>
-        </View>
-        <View style={styles.expenseInfo}>
-          <Text style={styles.expenseDescription}>{item.description}</Text>
-          <Text style={styles.expenseDetails}>
-            {item.categoryName || 'Sem categoria'} • {item.paymentMethodName || 'Dinheiro'}
-          </Text>
-          <Text style={styles.expenseDate}>{formatDate(item.date)}</Text>
-        </View>
-      </View>
+  const renderExpenseItem = ({ item, index }) => (
+    <AnimatedCard delay={index * 50} style={styles.expenseCard}>
+      <ScaleButton onPress={() => openEditExpense(item)} style={styles.expenseButton}>
+        <View style={styles.expenseContent}>
+          <View style={styles.expenseLeft}>
+            <View style={styles.expenseIcon}>
+              <Text style={styles.categoryIcon}>{item.categoryIcon || '💰'}</Text>
+            </View>
+            <View style={styles.expenseInfo}>
+              <Text style={styles.expenseDescription}>{item.description}</Text>
+              <View style={styles.expenseChips}>
+                <Chip 
+                  label={item.categoryName || 'Sem categoria'}
+                  icon={item.categoryIcon}
+                  style={styles.miniChip}
+                />
+                <Chip 
+                  label={item.paymentMethodName || 'Dinheiro'}
+                  icon={item.paymentMethodIcon}
+                  style={styles.miniChip}
+                />
+              </View>
+              <Text style={styles.expenseDate}>{formatDate(item.date)}</Text>
+            </View>
+          </View>
 
-      <View style={styles.expenseRight}>
-        <Text style={styles.expenseAmount}>{formatCurrency(item.amount)}</Text>
-        <TouchableOpacity style={styles.deleteButton} onPress={() => handleDelete(item)}>
-          <MaterialCommunityIcons name='delete-outline' size={20} color={NUBANK_COLORS.ERROR} />
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
+          <View style={styles.expenseRight}>
+            <Text style={styles.expenseAmount}>{formatCurrency(item.amount)}</Text>
+            <ScaleButton 
+              style={styles.deleteButton} 
+              onPress={() => handleDelete(item)}
+            >
+              <MaterialCommunityIcons 
+                name='delete-outline' 
+                size={20} 
+                color={NUBANK_COLORS.ERROR} 
+              />
+            </ScaleButton>
+          </View>
+        </View>
+      </ScaleButton>
+    </AnimatedCard>
   );
 
   const renderCategoryItem = ({ item }) => (
-    <TouchableOpacity
-      style={[styles.categoryItem, selectedCategory === item.id && styles.categoryItemSelected]}
+    <Chip
+      label={item.name}
+      icon={item.icon}
+      selected={selectedCategory === item.id}
       onPress={() => setSelectedCategory(item.id)}
-    >
-      <Text style={styles.categoryEmoji}>{item.icon}</Text>
-      <Text
-        style={[styles.categoryText, selectedCategory === item.id && styles.categoryTextSelected]}
-      >
-        {item.name}
-      </Text>
-    </TouchableOpacity>
+      style={styles.categoryChip}
+    />
   );
 
   const renderPaymentMethodItem = ({ item }) => (
-    <TouchableOpacity
-      style={[styles.paymentItem, selectedPaymentMethod === item.id && styles.paymentItemSelected]}
+    <Chip
+      label={item.name}
+      icon={item.icon}
+      selected={selectedPaymentMethod === item.id}
       onPress={() => setSelectedPaymentMethod(item.id)}
-    >
-      <Text style={styles.paymentEmoji}>{item.icon}</Text>
-      <Text
-        style={[
-          styles.paymentText,
-          selectedPaymentMethod === item.id && styles.paymentTextSelected
-        ]}
-      >
-        {item.name}
-      </Text>
-    </TouchableOpacity>
+      style={styles.paymentChip}
+    />
   );
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size='large' color={NUBANK_COLORS.PRIMARY} />
-        <Text style={styles.loadingText}>Carregando despesas...</Text>
+        <LinearGradient
+          colors={NUBANK_COLORS.GRADIENT_PRIMARY}
+          style={[styles.header, { paddingTop: insets.top }]}
+        />
+        <View style={styles.skeletonContainer}>
+          {[1, 2, 3, 4, 5].map((i) => (
+            <View key={i} style={styles.skeletonCard}>
+              <SkeletonLoader width={50} height={50} borderRadius={25} />
+              <View style={styles.skeletonContent}>
+                <SkeletonLoader width="60%" height={20} style={{ marginBottom: 8 }} />
+                <SkeletonLoader width="40%" height={16} />
+              </View>
+              <SkeletonLoader width={80} height={24} />
+            </View>
+          ))}
+        </View>
       </View>
     );
   }
@@ -390,11 +464,21 @@ export default function ExpenseManager({ navigation }) {
             />
           </TouchableOpacity>
         </View>
+
+        {/* Barra de busca */}
+        <View style={styles.searchContainer}>
+          <SearchBar
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Buscar despesas..."
+            style={styles.searchBar}
+          />
+        </View>
       </LinearGradient>
 
       {/* Lista de despesas */}
       <FlatList
-        data={expenses}
+        data={filteredExpenses}
         renderItem={renderExpenseItem}
         keyExtractor={item => item.id.toString()}
         contentContainerStyle={styles.listContainer}
@@ -495,19 +579,34 @@ export default function ExpenseManager({ navigation }) {
 
           {/* Botões do modal */}
           <View style={styles.modalButtons}>
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
+            <ScaleButton 
+              style={styles.cancelButton} 
+              onPress={() => setModalVisible(false)}
+            >
               <Text style={styles.cancelButtonText}>Cancelar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={saving}>
+            </ScaleButton>
+            <ScaleButton
+              style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+              onPress={handleSave}
+              disabled={saving}
+            >
               {saving ? (
                 <ActivityIndicator color={NUBANK_COLORS.TEXT_WHITE} />
               ) : (
-                <Text style={styles.saveButtonText}>Salvar</Text>
+                <Text style={styles.saveButtonText}>
+                  {editingExpense ? 'Salvar Alterações' : 'Adicionar'}
+                </Text>
               )}
-            </TouchableOpacity>
+            </ScaleButton>
           </View>
         </View>
       </Modal>
+
+      {/* Loading overlay */}
+      <LoadingOverlay 
+        visible={saving} 
+        message="Salvando despesa..." 
+      />
     </KeyboardAvoidingView>
   );
 }

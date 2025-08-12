@@ -63,7 +63,7 @@ export default function EstablishmentCategoryList({ onEdit, searchQuery = '', re
       // Query defensiva - verifica se tabela establishment_categories existe
       try {
         results = await db.getAllAsync(
-          `SELECT * FROM establishment_categories WHERE user_id = ? ORDER BY name ASC`,
+          'SELECT * FROM establishment_categories WHERE user_id = ? ORDER BY name ASC',
           [user.id]
         );
       } catch (tableError) {

@@ -25,7 +25,7 @@ export async function getCurrentLocation() {
     console.log(`📍 Localização obtida: ${latitude}, ${longitude} (precisão: ${accuracy}m)`);
 
     // Dados básicos de localização
-    let locationData = {
+    const locationData = {
       lat: latitude,
       lng: longitude,
       accuracy: accuracy || 0,

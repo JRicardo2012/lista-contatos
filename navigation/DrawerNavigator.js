@@ -10,6 +10,7 @@ import {
 } from '@react-navigation/drawer';
 import CategoryManager from '../components/CategoryManager';
 import ExpenseManager from '../components/ExpenseManager';
+import IncomeManager from '../components/IncomeManager';
 import EstablishmentManager from '../components/EstablishmentManager';
 import EstablishmentCategoryManager from '../components/EstablishmentCategoryManager';
 import GroupedExpenseList from '../components/GroupedExpenseList';
@@ -36,6 +37,7 @@ function CustomDrawerContent(props) {
   const menuItems = [
     { name: 'Dashboard', title: 'Início', icon: 'home' },
     { name: 'Despesas', title: 'Despesas', icon: 'cash-minus' },
+    { name: 'Receitas', title: 'Receitas', icon: 'cash-plus' },
     { name: 'Categorias', title: 'Categorias', icon: 'tag-multiple' },
     { name: 'Estabelecimentos', title: 'Estabelecimentos', icon: 'store' },
     { name: 'Categorias de Estabelecimentos', title: 'Categorias de Estabelecimentos', icon: 'store-plus' },
@@ -155,6 +157,16 @@ export default function DrawerNavigator() {
         options={{
           drawerIcon: ({ color }) => (
             <MaterialCommunityIcons name='cash-minus' size={24} color={color} />
+          )
+        }}
+      />
+
+      <Drawer.Screen
+        name='Receitas'
+        component={IncomeManager}
+        options={{
+          drawerIcon: ({ color }) => (
+            <MaterialCommunityIcons name='cash-plus' size={24} color={color} />
           )
         }}
       />

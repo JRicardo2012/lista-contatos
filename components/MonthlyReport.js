@@ -158,9 +158,9 @@ export default function MonthlyReport() {
         const biggestExpense =
           expensesList.length > 0
             ? expensesList.reduce(
-                (max, current) => (current.amount > max.amount ? current : max),
-                expensesList[0]
-              )
+              (max, current) => (current.amount > max.amount ? current : max),
+              expensesList[0]
+            )
             : null;
 
         // 6. Comparação com mês anterior - COM USER_ID
@@ -312,12 +312,12 @@ export default function MonthlyReport() {
       const monthName = monthNames[selectedMonth];
       const { totalAmount, totalTransactions, categoryDistribution } = monthData;
 
-      let message = `📊 RELATÓRIO DE DESPESAS\n`;
+      let message = '📊 RELATÓRIO DE DESPESAS\n';
       message += `${monthName} de ${selectedYear}\n\n`;
       message += `💰 Total: ${formatCurrency(totalAmount)}\n`;
       message += `📝 Transações: ${totalTransactions}\n`;
       message += `📊 Média: ${formatCurrency(totalAmount / totalTransactions)}\n\n`;
-      message += `POR CATEGORIA:\n`;
+      message += 'POR CATEGORIA:\n';
 
       categoryDistribution.slice(0, 5).forEach(cat => {
         message += `${cat.icon} ${cat.category}: ${formatCurrency(cat.total)} (${cat.percentage.toFixed(1)}%)\n`;

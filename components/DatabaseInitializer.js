@@ -31,7 +31,7 @@ class TransactionManager {
 class SchemaMigrationManager {
   constructor(db) {
     this.db = db;
-    this.currentVersion = '2.3.0';
+    this.currentVersion = '2.4.0';
   }
 
   async getCurrentVersion() {
@@ -79,7 +79,8 @@ class SchemaMigrationManager {
       { version: '2.0.0', apply: () => this.migrateTo_2_0_0() },
       { version: '2.1.0', apply: () => this.migrateTo_2_1_0() },
       { version: '2.2.0', apply: () => this.migrateTo_2_2_0() },
-      { version: '2.3.0', apply: () => this.migrateTo_2_3_0() }
+      { version: '2.3.0', apply: () => this.migrateTo_2_3_0() },
+      { version: '2.4.0', apply: () => this.migrateTo_2_4_0() }
     ];
 
     for (const migration of migrations) {
@@ -133,7 +134,7 @@ class SchemaMigrationManager {
       await this.db.execAsync('ALTER TABLE categories ADD COLUMN updated_at TEXT');
       // Depois atualiza valores existentes
       await this.db.execAsync(
-        `UPDATE categories SET updated_at = datetime('now') WHERE updated_at IS NULL`
+        'UPDATE categories SET updated_at = datetime(\'now\') WHERE updated_at IS NULL'
       );
       console.log('✅ Adicionada coluna updated_at em categories');
     }
@@ -160,7 +161,7 @@ class SchemaMigrationManager {
     if (!expenseColumns.includes('created_at')) {
       await this.db.execAsync('ALTER TABLE expenses ADD COLUMN created_at TEXT');
       await this.db.execAsync(
-        `UPDATE expenses SET created_at = datetime('now') WHERE created_at IS NULL`
+        'UPDATE expenses SET created_at = datetime(\'now\') WHERE created_at IS NULL'
       );
       console.log('✅ Adicionada coluna created_at em expenses');
     }
@@ -168,7 +169,7 @@ class SchemaMigrationManager {
     if (!expenseColumns.includes('updated_at')) {
       await this.db.execAsync('ALTER TABLE expenses ADD COLUMN updated_at TEXT');
       await this.db.execAsync(
-        `UPDATE expenses SET updated_at = datetime('now') WHERE updated_at IS NULL`
+        'UPDATE expenses SET updated_at = datetime(\'now\') WHERE updated_at IS NULL'
       );
       console.log('✅ Adicionada coluna updated_at em expenses');
     }
@@ -189,7 +190,7 @@ class SchemaMigrationManager {
     if (!paymentColumns.includes('created_at')) {
       await this.db.execAsync('ALTER TABLE payment_methods ADD COLUMN created_at TEXT');
       await this.db.execAsync(
-        `UPDATE payment_methods SET created_at = datetime('now') WHERE created_at IS NULL`
+        'UPDATE payment_methods SET created_at = datetime(\'now\') WHERE created_at IS NULL'
       );
       console.log('✅ Adicionada coluna created_at em payment_methods');
     }
@@ -396,6 +397,73 @@ class SchemaMigrationManager {
       console.log(`✅ Categorias padrão criadas para ${users.length} usuário(s)`);
     } catch (error) {
       console.log('⚠️ Erro ao criar categorias padrão:', error.message);
+    }
+  }
+
+  // Migração para versão 2.4.0 - Adiciona tabela de receitas
+  async migrateTo_2_4_0() {
+    console.log('🔧 Executando migração 2.4.0...');
+
+    // Cria tabela de receitas
+    console.log('🔧 Criando tabela incomes...');
+    await this.db.execAsync(`
+      CREATE TABLE IF NOT EXISTS incomes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        description TEXT NOT NULL,
+        amount REAL NOT NULL,
+        date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        categoryId INTEGER,
+        payment_method_id INTEGER,
+        establishment_id INTEGER,
+        user_id INTEGER NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        notes TEXT,
+        tags TEXT,
+        is_recurring INTEGER DEFAULT 0,
+        FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE SET NULL,
+        FOREIGN KEY (payment_method_id) REFERENCES payment_methods(id) ON DELETE SET NULL,
+        FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE SET NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+    `);
+    console.log('✅ Tabela incomes criada com sucesso');
+
+    // Cria categorias padrão de receita para cada usuário
+    try {
+      const users = await this.db.getAllAsync('SELECT id FROM users');
+      
+      const defaultIncomeCategories = [
+        { name: 'Salário', icon: '💰' },
+        { name: 'Freelance', icon: '💻' },
+        { name: 'Investimentos', icon: '📈' },
+        { name: 'Vendas', icon: '🛒' },
+        { name: 'Outros', icon: '💵' }
+      ];
+
+      for (const user of users) {
+        for (const category of defaultIncomeCategories) {
+          try {
+            await this.db.runAsync(
+              'INSERT OR IGNORE INTO categories (name, icon, user_id, type) VALUES (?, ?, ?, ?)',
+              [category.name, category.icon, user.id, 'receita']
+            );
+          } catch (error) {
+            console.log(`⚠️ Erro ao criar categoria de receita padrão "${category.name}" para usuário ${user.id}:`, error.message);
+          }
+        }
+      }
+
+      console.log(`✅ Categorias de receita padrão criadas para ${users.length} usuário(s)`);
+    } catch (error) {
+      console.log('⚠️ Erro ao criar categorias de receita padrão:', error.message);
+    }
+
+    // Adiciona coluna 'type' à tabela categories se não existir
+    const categoryColumns = await this.checkTableStructure('categories');
+    if (!categoryColumns.includes('type')) {
+      await this.db.execAsync('ALTER TABLE categories ADD COLUMN type TEXT DEFAULT "despesa"');
+      console.log('✅ Adicionada coluna type em categories');
     }
   }
 }

@@ -42,19 +42,19 @@ const getEstablishmentFields = (categories = []) => {
   // Se não há categorias, criar algumas padrão
   const categoryOptions = categories.length > 0 
     ? categories.map(cat => {
-        const cleanIcon = sanitizeIcon(cat.icon);
-        return {
-          value: cat.id.toString(),
-          label: cat.name,
-          icon: cleanIcon
-        };
-      })
+      const cleanIcon = sanitizeIcon(cat.icon);
+      return {
+        value: cat.id.toString(),
+        label: cat.name,
+        icon: cleanIcon
+      };
+    })
     : [
-        { value: 'temp_1', label: 'Restaurante', icon: '🍽️' },
-        { value: 'temp_2', label: 'Supermercado', icon: '🛒' },
-        { value: 'temp_3', label: 'Farmácia', icon: '💊' },
-        { value: 'temp_4', label: 'Posto de Combustível', icon: '⛽' }
-      ];
+      { value: 'temp_1', label: 'Restaurante', icon: '🍽️' },
+      { value: 'temp_2', label: 'Supermercado', icon: '🛒' },
+      { value: 'temp_3', label: 'Farmácia', icon: '💊' },
+      { value: 'temp_4', label: 'Posto de Combustível', icon: '⛽' }
+    ];
 
   return [
     {
@@ -71,63 +71,63 @@ const getEstablishmentFields = (categories = []) => {
       label: 'Categorias (opcional)',
       options: categoryOptions
     },
-  {
-    name: 'street',
-    type: 'text',
-    label: 'Rua/Avenida',
-    placeholder: 'Nome da rua',
-    icon: 'road'
-  },
-  {
-    name: 'number',
-    type: 'text',
-    label: 'Número',
-    placeholder: '123',
-    icon: 'numeric',
-    keyboardType: 'numeric'
-  },
-  {
-    name: 'district',
-    type: 'text',
-    label: 'Bairro',
-    placeholder: 'Nome do bairro',
-    icon: 'home-city'
-  },
-  {
-    name: 'city',
-    type: 'text',
-    label: 'Cidade',
-    placeholder: 'Nome da cidade',
-    icon: 'city'
-  },
-  {
-    name: 'state',
-    type: 'text',
-    label: 'Estado',
-    placeholder: 'Estado',
-    icon: 'map',
-    maxLength: 20
-  },
-  {
-    name: 'zipcode',
-    type: 'text',
-    label: 'CEP',
-    placeholder: '00000-000',
-    icon: 'mailbox',
-    keyboardType: 'numeric',
-    maxLength: 9,
-    formatter: formatCEP
-  },
-  {
-    name: 'phone',
-    type: 'text',
-    label: 'Telefone',
-    placeholder: '(00) 00000-0000',
-    icon: 'phone',
-    keyboardType: 'phone-pad',
-    maxLength: 15,
-    formatter: formatPhone
-  }
+    {
+      name: 'street',
+      type: 'text',
+      label: 'Rua/Avenida',
+      placeholder: 'Nome da rua',
+      icon: 'road'
+    },
+    {
+      name: 'number',
+      type: 'text',
+      label: 'Número',
+      placeholder: '123',
+      icon: 'numeric',
+      keyboardType: 'numeric'
+    },
+    {
+      name: 'district',
+      type: 'text',
+      label: 'Bairro',
+      placeholder: 'Nome do bairro',
+      icon: 'home-city'
+    },
+    {
+      name: 'city',
+      type: 'text',
+      label: 'Cidade',
+      placeholder: 'Nome da cidade',
+      icon: 'city'
+    },
+    {
+      name: 'state',
+      type: 'text',
+      label: 'Estado',
+      placeholder: 'Estado',
+      icon: 'map',
+      maxLength: 20
+    },
+    {
+      name: 'zipcode',
+      type: 'text',
+      label: 'CEP',
+      placeholder: '00000-000',
+      icon: 'mailbox',
+      keyboardType: 'numeric',
+      maxLength: 9,
+      formatter: formatCEP
+    },
+    {
+      name: 'phone',
+      type: 'text',
+      label: 'Telefone',
+      placeholder: '(00) 00000-0000',
+      icon: 'phone',
+      keyboardType: 'phone-pad',
+      maxLength: 15,
+      formatter: formatPhone
+    }
   ];
 };
 
@@ -399,7 +399,7 @@ export default function EstablishmentForm({ visible, establishment, onClose, onS
       
       // Insere as novas categorias na tabela intermediária (se houver)
       if (selectedCategoryIds.length > 0) {
-        let validCategoryIds = [];
+        const validCategoryIds = [];
         
         // Verifica quais categorias existem na tabela correta
         for (const categoryId of selectedCategoryIds) {

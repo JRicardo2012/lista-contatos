@@ -139,7 +139,7 @@ export default function EstablishmentList({ onEdit, searchQuery = '' }) {
           console.log('⚠️ Tabela establishment_category não existe ainda, usando query simples');
           // Fallback para query simples se tabelas não existem
           results = await db.getAllAsync(
-            `SELECT * FROM establishments WHERE user_id = ? ORDER BY name ASC`,
+            'SELECT * FROM establishments WHERE user_id = ? ORDER BY name ASC',
             [user.id]
           );
         }

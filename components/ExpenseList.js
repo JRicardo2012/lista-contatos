@@ -98,7 +98,7 @@ export default function ExpenseList({ onEdit = () => {} }) {
 
       // Tenta mostrar estrutura da tabela para debug
       try {
-        const tableInfo = await db.getAllAsync(`PRAGMA table_info(expenses)`);
+        const tableInfo = await db.getAllAsync('PRAGMA table_info(expenses)');
         console.log('🏗️ Estrutura da tabela expenses:', tableInfo);
       } catch (e) {
         console.error('❌ Erro ao obter estrutura da tabela:', e);

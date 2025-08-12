@@ -145,7 +145,7 @@ export default function PaymentMethodForm({ visible, paymentMethod, onClose, onS
 
         // Inserção
         const result = await db.runAsync(
-          `INSERT INTO payment_methods (name, icon, user_id) VALUES (?, ?, ?)`,
+          'INSERT INTO payment_methods (name, icon, user_id) VALUES (?, ?, ?)',
           [data.name, data.icon, data.user_id]
         );
         

@@ -151,7 +151,7 @@ export default function EstablishmentCategoryFormWithPreview({ visible, category
 
         // Inserção
         const result = await db.runAsync(
-          `INSERT INTO establishment_categories (name, icon, user_id) VALUES (?, ?, ?)`,
+          'INSERT INTO establishment_categories (name, icon, user_id) VALUES (?, ?, ?)',
           [data.name, data.icon, data.user_id]
         );
         

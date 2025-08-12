@@ -31,8 +31,9 @@ import {
 
 const { width: screenWidth } = Dimensions.get('window');
 
-// Listener global para atualização automática
+// Listeners globais para atualização automática
 global.expenseListeners = global.expenseListeners || [];
+global.incomeListeners = global.incomeListeners || [];
 
 export default function Dashboard({ navigation }) {
   const db = useSQLiteContext();
@@ -51,6 +52,14 @@ export default function Dashboard({ navigation }) {
   const [monthTotal, setMonthTotal] = useState(0);
   const [lastMonthTotal, setLastMonthTotal] = useState(0);
   const [yearTotal, setYearTotal] = useState(0);
+
+  // Dados de receitas
+  const [todayIncomeTotal, setTodayIncomeTotal] = useState(0);
+  const [todayIncomeCount, setTodayIncomeCount] = useState(0);
+  const [weekIncomeTotal, setWeekIncomeTotal] = useState(0);
+  const [monthIncomeTotal, setMonthIncomeTotal] = useState(0);
+  const [lastMonthIncomeTotal, setLastMonthIncomeTotal] = useState(0);
+  const [yearIncomeTotal, setYearIncomeTotal] = useState(0);
   const [categoryData, setCategoryData] = useState([]);
   const [weeklyData, setWeeklyData] = useState([]);
   const [recentExpenses, setRecentExpenses] = useState([]);
@@ -67,19 +76,30 @@ export default function Dashboard({ navigation }) {
   const slideAnim = useState(new Animated.Value(50))[0];
   const scaleAnim = useState(new Animated.Value(0.8))[0];
 
-  // Registra listener para atualizações automáticas
+  // Registra listeners para atualizações automáticas
   useEffect(() => {
-    const listener = () => {
+    const expenseListener = () => {
       console.log('📡 Dashboard notificado sobre mudança nas despesas');
       loadAllData();
     };
 
-    global.expenseListeners.push(listener);
+    const incomeListener = () => {
+      console.log('📡 Dashboard notificado sobre mudança nas receitas');
+      loadAllData();
+    };
+
+    global.expenseListeners.push(expenseListener);
+    global.incomeListeners.push(incomeListener);
 
     return () => {
-      const index = global.expenseListeners.indexOf(listener);
-      if (index > -1) {
-        global.expenseListeners.splice(index, 1);
+      const expenseIndex = global.expenseListeners.indexOf(expenseListener);
+      if (expenseIndex > -1) {
+        global.expenseListeners.splice(expenseIndex, 1);
+      }
+      
+      const incomeIndex = global.incomeListeners.indexOf(incomeListener);
+      if (incomeIndex > -1) {
+        global.incomeListeners.splice(incomeIndex, 1);
       }
     };
   }, []);
@@ -328,6 +348,74 @@ export default function Dashboard({ navigation }) {
     return results || [];
   };
 
+  // Funções de dados de receitas
+  const getTodayIncomeData = async () => {
+    const result = await db.getFirstAsync(
+      `
+      SELECT 
+        COALESCE(SUM(CAST(amount AS REAL)), 0) as total,
+        COUNT(*) as count
+      FROM incomes 
+      WHERE DATE(date) = DATE('now', 'localtime')
+      AND user_id = ?
+    `,
+      [user.id]
+    );
+    return result || { total: 0, count: 0 };
+  };
+
+  const getWeekIncomeData = async () => {
+    const result = await db.getFirstAsync(
+      `
+      SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total
+      FROM incomes 
+      WHERE DATE(date) >= DATE('now', '-7 days', 'localtime')
+      AND user_id = ?
+    `,
+      [user.id]
+    );
+    return result?.total || 0;
+  };
+
+  const getMonthIncomeData = async () => {
+    const result = await db.getFirstAsync(
+      `
+      SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total
+      FROM incomes 
+      WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now', 'localtime')
+      AND user_id = ?
+    `,
+      [user.id]
+    );
+    return result?.total || 0;
+  };
+
+  const getLastMonthIncomeData = async () => {
+    const result = await db.getFirstAsync(
+      `
+      SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total
+      FROM incomes 
+      WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now', '-1 month', 'localtime')
+      AND user_id = ?
+    `,
+      [user.id]
+    );
+    return result?.total || 0;
+  };
+
+  const getYearIncomeData = async () => {
+    const result = await db.getFirstAsync(
+      `
+      SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total
+      FROM incomes 
+      WHERE strftime('%Y', date) = strftime('%Y', 'now', 'localtime')
+      AND user_id = ?
+    `,
+      [user.id]
+    );
+    return result?.total || 0;
+  };
+
   const loadAllData = useCallback(async () => {
     if (!db || !user) return;
 
@@ -344,7 +432,12 @@ export default function Dashboard({ navigation }) {
         weekly,
         recent,
         monthly,
-        establishments
+        establishments,
+        todayIncomeData,
+        weekIncome,
+        monthIncome,
+        lastMonthIncome,
+        yearIncome
       ] = await Promise.all([
         getTodayData(),
         getWeekData(),
@@ -355,7 +448,12 @@ export default function Dashboard({ navigation }) {
         getWeeklyData(),
         getRecentExpenses(),
         getMonthlyTrend(),
-        getTopEstablishments()
+        getTopEstablishments(),
+        getTodayIncomeData(),
+        getWeekIncomeData(),
+        getMonthIncomeData(),
+        getLastMonthIncomeData(),
+        getYearIncomeData()
       ]);
 
       setTodayTotal(todayData.total);
@@ -369,6 +467,14 @@ export default function Dashboard({ navigation }) {
       setRecentExpenses(recent);
       setMonthlyTrend(monthly);
       setTopEstablishments(establishments);
+
+      // Dados de receitas
+      setTodayIncomeTotal(todayIncomeData.total);
+      setTodayIncomeCount(todayIncomeData.count);
+      setWeekIncomeTotal(weekIncome);
+      setMonthIncomeTotal(monthIncome);
+      setLastMonthIncomeTotal(lastMonthIncome);
+      setYearIncomeTotal(yearIncome);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       Alert.alert('Erro', 'Não foi possível carregar os dados');
@@ -507,9 +613,19 @@ export default function Dashboard({ navigation }) {
               onPress={() => navigation.navigate('Despesas')}
             >
               <View style={styles.quickActionIcon}>
-                <MaterialCommunityIcons name='plus' size={24} color={NUBANK_COLORS.PRIMARY} />
+                <MaterialCommunityIcons name='minus' size={24} color={NUBANK_COLORS.ERROR} />
               </View>
-              <Text style={styles.quickActionText}>Adicionar</Text>
+              <Text style={styles.quickActionText}>Despesa</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => navigation.navigate('Receitas')}
+            >
+              <View style={styles.quickActionIcon}>
+                <MaterialCommunityIcons name='plus' size={24} color={NUBANK_COLORS.SUCCESS} />
+              </View>
+              <Text style={styles.quickActionText}>Receita</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -596,6 +712,76 @@ export default function Dashboard({ navigation }) {
                 </View>
               </TouchableOpacity>
             </View>
+          </View>
+
+          {/* Seção de Receitas - Estilo Nubank */}
+          <View style={styles.summarySection}>
+            <Text style={styles.sectionTitle}>Receitas</Text>
+
+            <View style={styles.summaryCards}>
+              <TouchableOpacity style={styles.summaryCard}>
+                <View style={[styles.summaryCardContent, { backgroundColor: '#E8F8F5' }]}>
+                  <Text style={styles.summaryCardLabel}>Hoje</Text>
+                  <Text style={[styles.summaryCardValue, { color: NUBANK_COLORS.SUCCESS }]}>
+                    + {renderMaskedValue(todayIncomeTotal)}
+                  </Text>
+                  <Text style={styles.summaryCardSubtext}>
+                    {todayIncomeCount} {todayIncomeCount === 1 ? 'receita' : 'receitas'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.summaryCard}>
+                <View style={[styles.summaryCardContent, { backgroundColor: '#E8F8F5' }]}>
+                  <Text style={styles.summaryCardLabel}>Semana</Text>
+                  <Text style={[styles.summaryCardValue, { color: NUBANK_COLORS.SUCCESS }]}>
+                    + {renderMaskedValue(weekIncomeTotal)}
+                  </Text>
+                  <Text style={styles.summaryCardSubtext}>Últimos 7 dias</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.summaryCard}>
+                <View style={[styles.summaryCardContent, { backgroundColor: '#E8F8F5' }]}>
+                  <Text style={styles.summaryCardLabel}>Mês</Text>
+                  <Text style={[styles.summaryCardValue, { color: NUBANK_COLORS.SUCCESS }]}>
+                    + {renderMaskedValue(monthIncomeTotal)}
+                  </Text>
+                  <Text style={styles.summaryCardSubtext}>
+                    {monthIncomeTotal > lastMonthIncomeTotal ? '📈' : '📉'}{' '}
+                    {Math.abs(
+                      ((monthIncomeTotal - lastMonthIncomeTotal) / (lastMonthIncomeTotal || 1)) * 100
+                    ).toFixed(0)}
+                    %
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.summaryCard}>
+                <View style={[styles.summaryCardContent, { backgroundColor: '#E8F8F5' }]}>
+                  <Text style={styles.summaryCardLabel}>Ano</Text>
+                  <Text style={[styles.summaryCardValue, { color: NUBANK_COLORS.SUCCESS }]}>
+                    + {renderMaskedValue(yearIncomeTotal)}
+                  </Text>
+                  <Text style={styles.summaryCardSubtext}>{new Date().getFullYear()}</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* Card de saldo */}
+            <TouchableOpacity style={[styles.summaryCard, { width: '100%', paddingHorizontal: NUBANK_SPACING.SM }]}>
+              <View style={[styles.summaryCardContent, { backgroundColor: NUBANK_COLORS.PRIMARY, padding: NUBANK_SPACING.LG }]}>
+                <Text style={[styles.summaryCardLabel, { color: NUBANK_COLORS.TEXT_WHITE }]}>
+                  Saldo do Mês
+                </Text>
+                <Text style={[styles.summaryCardValue, { color: NUBANK_COLORS.TEXT_WHITE, fontSize: NUBANK_FONT_SIZES.XXL }]}>
+                  {renderMaskedValue(monthIncomeTotal - monthTotal)}
+                </Text>
+                <Text style={[styles.summaryCardSubtext, { color: NUBANK_COLORS.TEXT_WHITE, opacity: 0.8 }]}>
+                  Receitas - Despesas
+                </Text>
+              </View>
+            </TouchableOpacity>
           </View>
 
           {/* Gráfico de evolução - Estilo Nubank */}
