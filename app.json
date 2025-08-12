@@ -4,20 +4,21 @@
     "slug": "controle-financeiro",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon_192x192.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash_1242x2208.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#6366F1"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.seudominio.controlefinanceiro"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon_192x192.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#6366F1"
       },
       "permissions": [
         "ACCESS_FINE_LOCATION",
@@ -29,7 +30,7 @@
       "package": "com.jricardo2012.controlefinanceiro"
     },
     "web": {
-      "favicon": "./assets/icon_48x48.png"
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-sqlite",

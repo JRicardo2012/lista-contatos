@@ -1,5 +1,5 @@
-// components/CategoryManager.js - VERSÃO CORRETA
-import React, { useEffect, useState } from "react";
+// components/CategoryManager.js - VERSÃO COM PESQUISA
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -10,12 +10,15 @@ import {
   ActivityIndicator,
   ScrollView,
   Modal,
+  Keyboard,
 } from "react-native";
 import { StyleSheet } from "react-native";
 import { useSQLiteContext } from "expo-sqlite";
+import { useAuth } from '../services/AuthContext';
 
 export default function CategoryManager() {
   const db = useSQLiteContext();
+  const { user } = useAuth();
   
   const [categories, setCategories] = useState([]);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -23,6 +26,7 @@ export default function CategoryManager() {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
+  const [searchText, setSearchText] = useState(""); // NOVO: Estado para pesquisa
 
   // 🎨 ÍCONES DISPONÍVEIS PARA CATEGORIAS
   const availableIcons = [
@@ -33,10 +37,22 @@ export default function CategoryManager() {
   ];
 
   useEffect(() => {
-    if (db) {
+    if (db && user) {
       loadCategories();
     }
-  }, [db]);
+  }, [db, user]);
+
+  // NOVO: Filtrar categorias baseado na pesquisa
+  const filteredCategories = useMemo(() => {
+    if (!searchText.trim()) {
+      return categories;
+    }
+    
+    const searchLower = searchText.toLowerCase().trim();
+    return categories.filter(category => 
+      category.name.toLowerCase().includes(searchLower)
+    );
+  }, [categories, searchText]);
 
   const openNewCategoryModal = () => {
     setEditingCategory(null);
@@ -53,18 +69,19 @@ export default function CategoryManager() {
   };
 
   async function loadCategories() {
+    if (!user) return;
+    
     try {
-      console.log('🔍 Carregando categorias...');
+      console.log('🔍 Carregando categorias do usuário:', user.id);
       
-      const result = await db.getAllAsync("SELECT * FROM categories ORDER BY name");
-      
-      // Remove duplicatas baseado no nome
-      const uniqueCategories = result.filter((category, index, self) => 
-        index === self.findIndex(c => c.name === category.name)
+      // Carrega apenas categorias do usuário logado
+      const result = await db.getAllAsync(
+        "SELECT * FROM categories WHERE user_id = ? ORDER BY name",
+        [user.id]
       );
       
-      setCategories(uniqueCategories);
-      console.log(`✅ ${uniqueCategories.length} categorias carregadas`);
+      setCategories(result);
+      console.log(`✅ ${result.length} categorias carregadas`);
       
     } catch (err) {
       console.error("❌ Erro ao carregar categorias:", err);
@@ -79,6 +96,11 @@ export default function CategoryManager() {
   }
 
   async function handleSaveCategory() {
+    if (!user) {
+      Alert.alert("Erro", "Você precisa estar logado para gerenciar categorias.");
+      return;
+    }
+    
     const name = newCategoryName.trim();
     
     if (!name) {
@@ -100,25 +122,25 @@ export default function CategoryManager() {
       if (editingCategory) {
         // Editando categoria existente
         await db.runAsync(
-          "UPDATE categories SET name = ?, icon = ? WHERE id = ?", 
-          [name, selectedIcon, editingCategory.id]
+          "UPDATE categories SET name = ?, icon = ? WHERE id = ? AND user_id = ?", 
+          [name, selectedIcon, editingCategory.id, user.id]
         );
         Alert.alert("Sucesso", `Categoria "${name}" atualizada!`);
       } else {
         // Criando nova categoria
         const exists = await db.getFirstAsync(
-          "SELECT id FROM categories WHERE LOWER(name) = LOWER(?)", 
-          [name]
+          "SELECT id FROM categories WHERE LOWER(name) = LOWER(?) AND user_id = ?", 
+          [name, user.id]
         );
         
         if (exists) {
-          Alert.alert("Atenção", "Uma categoria com este nome já existe.");
+          Alert.alert("Atenção", "Você já tem uma categoria com este nome.");
           return;
         }
 
         await db.runAsync(
-          "INSERT INTO categories (name, icon) VALUES (?, ?)", 
-          [name, selectedIcon]
+          "INSERT INTO categories (name, icon, user_id) VALUES (?, ?, ?)", 
+          [name, selectedIcon, user.id]
         );
         Alert.alert("Sucesso", `Categoria "${name}" criada!`);
       }
@@ -133,10 +155,12 @@ export default function CategoryManager() {
   }
 
   async function handleDeleteCategory(category) {
+    if (!user) return;
+    
     // Verifica se há despesas usando esta categoria
     const expenses = await db.getFirstAsync(
-      "SELECT COUNT(*) as count FROM expenses WHERE categoryId = ?",
-      [category.id]
+      "SELECT COUNT(*) as count FROM expenses WHERE categoryId = ? AND user_id = ?",
+      [category.id, user.id]
     );
 
     let warningMessage = `Deseja excluir a categoria "${category.name}"?`;
@@ -155,7 +179,10 @@ export default function CategoryManager() {
           style: "destructive",
           onPress: async () => {
             try {
-              await db.runAsync("DELETE FROM categories WHERE id = ?", [category.id]);
+              await db.runAsync(
+                "DELETE FROM categories WHERE id = ? AND user_id = ?", 
+                [category.id, user.id]
+              );
               await loadCategories();
               Alert.alert("Sucesso", `Categoria "${category.name}" excluída!`);
             } catch (error) {
@@ -213,8 +240,10 @@ export default function CategoryManager() {
             </View>
             <Text style={styles.subtitle}>
               {categories.length === 0 
-                ? "Organize suas despesas por categoria" 
-                : `${categories.length} categoria${categories.length !== 1 ? 's' : ''} cadastrada${categories.length !== 1 ? 's' : ''}`
+                ? "Crie suas próprias categorias" 
+                : filteredCategories.length === categories.length
+                  ? `${categories.length} categoria${categories.length !== 1 ? 's' : ''} cadastrada${categories.length !== 1 ? 's' : ''}`
+                  : `${filteredCategories.length} de ${categories.length} categoria${categories.length !== 1 ? 's' : ''}`
               }
             </Text>
           </View>
@@ -229,13 +258,52 @@ export default function CategoryManager() {
         </View>
       </View>
 
+      {/* NOVO: Barra de Pesquisa */}
+      {categories.length > 0 && (
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputContainer}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Pesquisar categorias..."
+              placeholderTextColor="#9ca3af"
+              value={searchText}
+              onChangeText={setSearchText}
+              onSubmitEditing={() => Keyboard.dismiss()}
+              returnKeyType="search"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {searchText.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setSearchText("")}
+                style={styles.clearButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.clearIcon}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          
+          {/* Contador de resultados da pesquisa */}
+          {searchText.length > 0 && (
+            <Text style={styles.searchResults}>
+              {filteredCategories.length === 0 
+                ? "Nenhuma categoria encontrada" 
+                : `${filteredCategories.length} categoria${filteredCategories.length !== 1 ? 's' : ''} encontrada${filteredCategories.length !== 1 ? 's' : ''}`
+              }
+            </Text>
+          )}
+        </View>
+      )}
+
       {/* Lista de Categorias */}
       {categories.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyIcon}>📂</Text>
           <Text style={styles.emptyTitle}>Nenhuma categoria ainda</Text>
           <Text style={styles.emptySubtitle}>
-            Crie categorias para organizar melhor suas despesas!
+            Crie categorias personalizadas para organizar suas despesas!
           </Text>
           <TouchableOpacity 
             style={styles.emptyButton}
@@ -244,9 +312,29 @@ export default function CategoryManager() {
             <Text style={styles.emptyButtonText}>➕ Criar Primeira Categoria</Text>
           </TouchableOpacity>
         </View>
+      ) : filteredCategories.length === 0 ? (
+        // NOVO: Estado vazio para pesquisa sem resultados
+        <View style={styles.noResultsContainer}>
+          <Text style={styles.noResultsIcon}>🔍</Text>
+          <Text style={styles.noResultsTitle}>Nenhuma categoria encontrada</Text>
+          <Text style={styles.noResultsSubtitle}>
+            Tente pesquisar com outros termos ou crie uma nova categoria
+          </Text>
+          <TouchableOpacity 
+            style={styles.createFromSearchButton}
+            onPress={() => {
+              setNewCategoryName(searchText);
+              openNewCategoryModal();
+            }}
+          >
+            <Text style={styles.createFromSearchText}>
+              ➕ Criar categoria "{searchText}"
+            </Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <FlatList
-          data={categories}
+          data={filteredCategories}
           keyExtractor={(item) => `category-${item.id}`}
           renderItem={({ item, index }) => (
             <View style={[styles.categoryCard, { marginTop: index === 0 ? 0 : 6 }]}>
@@ -277,6 +365,7 @@ export default function CategoryManager() {
           )}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         />
       )}
 
@@ -432,6 +521,90 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
   },
+
+  // NOVO: Estilos da barra de pesquisa
+  searchContainer: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  searchIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1e293b',
+    paddingVertical: 10,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  clearIcon: {
+    fontSize: 16,
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  searchResults: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 8,
+    marginLeft: 4,
+  },
+
+  // NOVO: Estilos para pesquisa sem resultados
+  noResultsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  noResultsIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+    opacity: 0.3,
+  },
+  noResultsTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  noResultsSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  createFromSearchButton: {
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+  },
+  createFromSearchText: {
+    color: '#3b82f6',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
   list: {
     padding: 16,
   },
@@ -478,7 +651,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#1e293b',
-    marginBottom: 2,
   },
   editIcon: {
     fontSize: 14,

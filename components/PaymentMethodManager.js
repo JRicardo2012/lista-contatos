@@ -1,4 +1,4 @@
-// components/PaymentMethodManager.js - VERSÃO CORRIGIDA
+// components/PaymentMethodManager.js - VERSÃO SEM MÉTODOS DO SISTEMA E COM MAIS ÍCONES
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -10,12 +10,15 @@ import {
   ActivityIndicator,
   ScrollView,
   Modal,
+  Keyboard,
 } from "react-native";
-import { StyleSheet } from "react-native"; // Importação separada para debug
+import { StyleSheet } from "react-native";
 import { useSQLiteContext } from "expo-sqlite";
+import { useAuth } from '../services/AuthContext';
 
 export default function PaymentMethodManager() {
   const db = useSQLiteContext();
+  const { user } = useAuth();
   
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [newMethodName, setNewMethodName] = useState("");
@@ -23,19 +26,39 @@ export default function PaymentMethodManager() {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingMethod, setEditingMethod] = useState(null);
+  const [searchText, setSearchText] = useState(""); // Campo de pesquisa
 
-  // 🆕 ÍCONES DISPONÍVEIS PARA FORMAS DE PAGAMENTO
+  // 🎨 ÍCONES EXPANDIDOS PARA MÉTODOS DE PAGAMENTO
   const availableIcons = [
-    '💳', '💵', '💰', '🏦', '📱', '💸', '🪙', '📲',
-    '🏧', '💎', '🎫', '🎟️', '📄', '✅', '🔄', '⚡',
-    '🛒', '🛍️', '💶', '💷', '💴', '🏪', '🏬', '🎁'
+    // Ícones principais de pagamento
+    '💳', '💵', '💰', '🏦', '📱', '💸', '🪙', '💲',
+    '🏧', '💴', '💶', '💷', '📲', '🏪', '🛒', '💎',
+    '🎫', '🧾', '📄', '✉️', '📮', '🔖', '🏷️', '💌',
+    
+    // Novos ícones adicionados
+    '💹', '📈', '📊', '💱', '🤑', '💯', '🔢', '💼',
+    '🎯', '🎪', '🎭', '🎰', '🎲', '🎯', '🏅', '🏆',
+    '📋', '📌', '📍', '📎', '🔗', '📏', '📐', '✂️',
+    '🖇️', '📝', '✏️', '🖊️', '🖍️', '🔏', '🔐', '🔑',
+    '🗝️', '🔓', '🔒', '📦', '📫', '📪', '📬', '📭',
+    '🗳️', '✅', '☑️', '✔️', '❌', '❎', '➕', '➖',
+    '➗', '✖️', '♾️', '💱', '™️', '©️', '®️', '🔘',
+    '🔴', '🟠', '🟡', '🟢', '🔵', '🟣', '⚫', '⚪',
+    '🟤', '🔺', '🔻', '🔸', '🔹', '🔶', '🔷', '🔳',
+    '🔲', '▪️', '▫️', '◾', '◽', '◼️', '◻️', '🟥',
+    '🟧', '🟨', '🟩', '🟦', '🟪', '⬛', '⬜', '🟫'
   ];
 
   useEffect(() => {
-    if (db) {
+    if (db && user) {
       loadPaymentMethods();
     }
-  }, [db]);
+  }, [db, user]);
+
+  // Filtrar métodos baseado na pesquisa
+  const filteredMethods = paymentMethods.filter(method => 
+    method.name.toLowerCase().includes(searchText.toLowerCase())
+  );
 
   const openNewMethodModal = () => {
     setEditingMethod(null);
@@ -52,18 +75,19 @@ export default function PaymentMethodManager() {
   };
 
   async function loadPaymentMethods() {
+    if (!user) return;
+    
     try {
-      console.log('🔍 Carregando métodos de pagamento...');
+      console.log('🔍 Carregando métodos de pagamento do usuário:', user.id);
       
-      const result = await db.getAllAsync("SELECT * FROM payment_methods ORDER BY name");
-      
-      // Remove duplicatas baseado no nome
-      const uniqueMethods = result.filter((method, index, self) => 
-        index === self.findIndex(m => m.name === method.name)
+      // Carrega APENAS métodos do usuário logado (não do sistema)
+      const result = await db.getAllAsync(
+        "SELECT * FROM payment_methods WHERE user_id = ? ORDER BY name",
+        [user.id]
       );
       
-      setPaymentMethods(uniqueMethods);
-      console.log(`✅ ${uniqueMethods.length} métodos de pagamento carregados`);
+      console.log(`✅ ${result?.length || 0} métodos de pagamento carregados`);
+      setPaymentMethods(result || []);
       
     } catch (err) {
       console.error("❌ Erro ao carregar métodos de pagamento:", err);
@@ -78,6 +102,11 @@ export default function PaymentMethodManager() {
   }
 
   async function handleSaveMethod() {
+    if (!user) {
+      Alert.alert("Erro", "Você precisa estar logado para gerenciar métodos de pagamento.");
+      return;
+    }
+    
     const name = newMethodName.trim();
     
     if (!name) {
@@ -99,42 +128,63 @@ export default function PaymentMethodManager() {
       if (editingMethod) {
         // Editando método existente
         await db.runAsync(
-          "UPDATE payment_methods SET name = ?, icon = ? WHERE id = ?", 
-          [name, selectedIcon, editingMethod.id]
+          "UPDATE payment_methods SET name = ?, icon = ? WHERE id = ? AND user_id = ?", 
+          [name, selectedIcon, editingMethod.id, user.id]
         );
-        Alert.alert("Sucesso", `Método "${name}" atualizado!`);
+        
+        Alert.alert("Sucesso", `Método de pagamento "${name}" atualizado!`);
       } else {
         // Criando novo método
         const exists = await db.getFirstAsync(
-          "SELECT id FROM payment_methods WHERE LOWER(name) = LOWER(?)", 
-          [name]
+          "SELECT id FROM payment_methods WHERE LOWER(name) = LOWER(?) AND user_id = ?", 
+          [name, user.id]
         );
         
         if (exists) {
-          Alert.alert("Atenção", "Um método de pagamento com este nome já existe.");
+          Alert.alert("Atenção", "Você já tem um método de pagamento com este nome.");
           return;
         }
 
         await db.runAsync(
-          "INSERT INTO payment_methods (name, icon) VALUES (?, ?)", 
-          [name, selectedIcon]
+          "INSERT INTO payment_methods (name, icon, user_id) VALUES (?, ?, ?)", 
+          [name, selectedIcon, user.id]
         );
-        Alert.alert("Sucesso", `Método "${name}" criado!`);
+        
+        Alert.alert("Sucesso", `Método de pagamento "${name}" criado!`);
       }
 
       setModalVisible(false);
       await loadPaymentMethods();
       
+      // Notifica outros componentes
+      if (global.expenseListeners) {
+        global.expenseListeners.forEach(listener => listener());
+      }
+      
     } catch (error) {
-      console.error("❌ Erro ao salvar método:", error);
-      Alert.alert("Erro", `Não foi possível salvar o método: ${error.message}`);
+      console.error("❌ Erro ao salvar método de pagamento:", error);
+      Alert.alert("Erro", `Não foi possível salvar o método de pagamento: ${error.message}`);
     }
   }
 
   async function handleDeleteMethod(method) {
+    if (!user) return;
+    
+    // Verifica se há despesas usando este método
+    const expenses = await db.getFirstAsync(
+      "SELECT COUNT(*) as count FROM expenses WHERE payment_method_id = ? AND user_id = ?",
+      [method.id, user.id]
+    );
+
+    let warningMessage = `Deseja excluir o método de pagamento "${method.name}"?`;
+    
+    if (expenses && expenses.count > 0) {
+      warningMessage += `\n\n⚠️ Atenção: ${expenses.count} despesa(s) estão usando este método e ficarão sem forma de pagamento.`;
+    }
+
     Alert.alert(
       "⚠️ Confirmar Exclusão", 
-      `Deseja excluir o método "${method.name}"?\n\nEsta ação não pode ser desfeita.`, 
+      warningMessage + "\n\nEsta ação não pode ser desfeita.", 
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -142,12 +192,21 @@ export default function PaymentMethodManager() {
           style: "destructive",
           onPress: async () => {
             try {
-              await db.runAsync("DELETE FROM payment_methods WHERE id = ?", [method.id]);
+              await db.runAsync(
+                "DELETE FROM payment_methods WHERE id = ? AND user_id = ?", 
+                [method.id, user.id]
+              );
+              
               await loadPaymentMethods();
-              Alert.alert("Sucesso", `Método "${method.name}" excluído!`);
+              Alert.alert("Sucesso", `Método de pagamento "${method.name}" excluído!`);
+              
+              // Notifica outros componentes
+              if (global.expenseListeners) {
+                global.expenseListeners.forEach(listener => listener());
+              }
             } catch (error) {
-              console.error("❌ Erro ao excluir método:", error);
-              Alert.alert("Erro", `Não foi possível excluir o método: ${error.message}`);
+              console.error("❌ Erro ao excluir método de pagamento:", error);
+              Alert.alert("Erro", `Não foi possível excluir o método de pagamento: ${error.message}`);
             }
           },
         },
@@ -201,7 +260,9 @@ export default function PaymentMethodManager() {
             <Text style={styles.subtitle}>
               {paymentMethods.length === 0 
                 ? "Configure suas formas de pagamento" 
-                : `${paymentMethods.length} método${paymentMethods.length !== 1 ? 's' : ''} cadastrado${paymentMethods.length !== 1 ? 's' : ''}`
+                : filteredMethods.length === paymentMethods.length
+                  ? `${paymentMethods.length} método${paymentMethods.length !== 1 ? 's' : ''} cadastrado${paymentMethods.length !== 1 ? 's' : ''}`
+                  : `${filteredMethods.length} de ${paymentMethods.length} método${paymentMethods.length !== 1 ? 's' : ''}`
               }
             </Text>
           </View>
@@ -216,25 +277,82 @@ export default function PaymentMethodManager() {
         </View>
       </View>
 
+      {/* Barra de Pesquisa */}
+      {paymentMethods.length > 0 && (
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputContainer}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Pesquisar métodos de pagamento..."
+              placeholderTextColor="#9ca3af"
+              value={searchText}
+              onChangeText={setSearchText}
+              onSubmitEditing={() => Keyboard.dismiss()}
+              returnKeyType="search"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {searchText.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setSearchText("")}
+                style={styles.clearButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.clearIcon}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          
+          {searchText.length > 0 && (
+            <Text style={styles.searchResults}>
+              {filteredMethods.length === 0 
+                ? "Nenhum método encontrado" 
+                : `${filteredMethods.length} método${filteredMethods.length !== 1 ? 's' : ''} encontrado${filteredMethods.length !== 1 ? 's' : ''}`
+              }
+            </Text>
+          )}
+        </View>
+      )}
+
       {/* Lista de Métodos */}
       {paymentMethods.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyIcon}>💳</Text>
-          <Text style={styles.emptyTitle}>Nenhum método ainda</Text>
+          <Text style={styles.emptyTitle}>Nenhuma forma de pagamento</Text>
           <Text style={styles.emptySubtitle}>
-            Adicione formas de pagamento como Dinheiro, Cartão de Crédito, PIX, etc.
+            Adicione cartões, dinheiro, PIX e outras formas de pagamento!
           </Text>
           <TouchableOpacity 
             style={styles.emptyButton}
             onPress={openNewMethodModal}
           >
-            <Text style={styles.emptyButtonText}>➕ Criar Primeiro Método</Text>
+            <Text style={styles.emptyButtonText}>➕ Adicionar Primeira Forma</Text>
+          </TouchableOpacity>
+        </View>
+      ) : filteredMethods.length === 0 ? (
+        <View style={styles.noResultsContainer}>
+          <Text style={styles.noResultsIcon}>🔍</Text>
+          <Text style={styles.noResultsTitle}>Nenhum método encontrado</Text>
+          <Text style={styles.noResultsSubtitle}>
+            Tente pesquisar com outros termos ou crie um novo método
+          </Text>
+          <TouchableOpacity 
+            style={styles.createFromSearchButton}
+            onPress={() => {
+              setNewMethodName(searchText);
+              openNewMethodModal();
+            }}
+          >
+            <Text style={styles.createFromSearchText}>
+              ➕ Criar método "{searchText}"
+            </Text>
           </TouchableOpacity>
         </View>
       ) : (
         <FlatList
-          data={paymentMethods}
-          keyExtractor={(item) => `payment-method-${item.id}`}
+          data={filteredMethods}
+          keyExtractor={(item) => `method-${item.id}`}
           renderItem={({ item, index }) => (
             <View style={[styles.methodCard, { marginTop: index === 0 ? 0 : 6 }]}>
               <TouchableOpacity 
@@ -264,6 +382,7 @@ export default function PaymentMethodManager() {
           )}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         />
       )}
 
@@ -279,7 +398,7 @@ export default function PaymentMethodManager() {
             {/* Header do Modal */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editingMethod ? '✏️ Editar Método' : '➕ Novo Método'}
+                {editingMethod ? '✏️ Editar Forma de Pagamento' : '➕ Nova Forma de Pagamento'}
               </Text>
               <TouchableOpacity 
                 onPress={() => setModalVisible(false)}
@@ -293,10 +412,10 @@ export default function PaymentMethodManager() {
             <ScrollView style={styles.modalBody}>
               {/* Campo Nome */}
               <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Nome do Método *</Text>
+                <Text style={styles.fieldLabel}>Nome da Forma de Pagamento *</Text>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="Ex: Dinheiro, Cartão de Crédito, PIX..."
+                  placeholder="Ex: Cartão Crédito, Dinheiro, PIX..."
                   value={newMethodName}
                   onChangeText={setNewMethodName}
                   maxLength={30}
@@ -318,6 +437,49 @@ export default function PaymentMethodManager() {
                   <Text style={styles.previewName}>
                     {newMethodName || 'Nome do método'}
                   </Text>
+                </View>
+              </View>
+
+              {/* Exemplos de uso */}
+              <View style={styles.examplesContainer}>
+                <Text style={styles.examplesTitle}>Sugestões comuns:</Text>
+                <View style={styles.examplesList}>
+                  <TouchableOpacity 
+                    style={styles.exampleChip}
+                    onPress={() => {
+                      setNewMethodName('Dinheiro');
+                      setSelectedIcon('💵');
+                    }}
+                  >
+                    <Text style={styles.exampleText}>💵 Dinheiro</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.exampleChip}
+                    onPress={() => {
+                      setNewMethodName('PIX');
+                      setSelectedIcon('📱');
+                    }}
+                  >
+                    <Text style={styles.exampleText}>📱 PIX</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.exampleChip}
+                    onPress={() => {
+                      setNewMethodName('Cartão Crédito');
+                      setSelectedIcon('💳');
+                    }}
+                  >
+                    <Text style={styles.exampleText}>💳 Cartão Crédito</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.exampleChip}
+                    onPress={() => {
+                      setNewMethodName('Cartão Débito');
+                      setSelectedIcon('💰');
+                    }}
+                  >
+                    <Text style={styles.exampleText}>💰 Cartão Débito</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             </ScrollView>
@@ -351,8 +513,7 @@ export default function PaymentMethodManager() {
   );
 }
 
-// Definindo estilos como objeto JavaScript para evitar problemas
-const styles = {
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f7f9fc',
@@ -397,13 +558,13 @@ const styles = {
     fontWeight: '400',
   },
   addButton: {
-    backgroundColor: '#34d399',
+    backgroundColor: '#10b981',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 12,
-    shadowColor: '#34d399',
+    shadowColor: '#10b981',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 6,
@@ -420,6 +581,90 @@ const styles = {
     color: '#ffffff',
     fontWeight: '600',
   },
+
+  // Estilos da barra de pesquisa
+  searchContainer: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  searchIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1e293b',
+    paddingVertical: 10,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  clearIcon: {
+    fontSize: 16,
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  searchResults: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 8,
+    marginLeft: 4,
+  },
+
+  // Estilos para pesquisa sem resultados
+  noResultsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  noResultsIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+    opacity: 0.3,
+  },
+  noResultsTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  noResultsSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  createFromSearchButton: {
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+  },
+  createFromSearchText: {
+    color: '#3b82f6',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
   list: {
     padding: 16,
   },
@@ -466,7 +711,6 @@ const styles = {
     fontSize: 15,
     fontWeight: '600',
     color: '#1e293b',
-    marginBottom: 2,
   },
   editIcon: {
     fontSize: 14,
@@ -513,11 +757,11 @@ const styles = {
     marginBottom: 32,
   },
   emptyButton: {
-    backgroundColor: '#34d399',
+    backgroundColor: '#10b981',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
-    shadowColor: '#34d399',
+    shadowColor: '#10b981',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 6,
@@ -653,8 +897,8 @@ const styles = {
   },
   iconOptionSelected: {
     backgroundColor: '#f0fdf4',
-    borderColor: '#34d399',
-    shadowColor: '#34d399',
+    borderColor: '#10b981',
+    shadowColor: '#10b981',
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
@@ -704,6 +948,38 @@ const styles = {
     fontWeight: '500',
     color: '#1e293b',
   },
+
+  // Exemplos
+  examplesContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  examplesTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6b7280',
+    marginBottom: 12,
+  },
+  examplesList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  exampleChip: {
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  exampleText: {
+    fontSize: 13,
+    color: '#3b82f6',
+  },
+
   modalFooter: {
     flexDirection: 'row',
     padding: 24,
@@ -727,11 +1003,11 @@ const styles = {
   },
   saveButton: {
     flex: 1,
-    backgroundColor: '#34d399',
+    backgroundColor: '#10b981',
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center',
-    shadowColor: '#34d399',
+    shadowColor: '#10b981',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
@@ -747,4 +1023,4 @@ const styles = {
     fontWeight: '600',
     color: '#ffffff',
   },
-};
+});

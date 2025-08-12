@@ -1,316 +1,460 @@
+// components/DatabaseInitializer.js - VERSÃO COMPLETA SEM DADOS DO SISTEMA
 import { useEffect, useState } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { hashPassword, needsPasswordMigration } from '../utils/crypto';
 
 export default function DatabaseInitializer({ children }) {
-  const db = useSQLiteContext();
-  const [initialized, setInitialized] = useState(false);
-  const [error, setError] = useState(null);
+ const db = useSQLiteContext();
+ const [initialized, setInitialized] = useState(false);
+ const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (db && !initialized) {
-      setupDatabase();
-    }
-  }, [db, initialized]);
+ useEffect(() => {
+   if (db && !initialized) {
+     setupDatabase();
+   }
+ }, [db, initialized]);
 
-  const setupDatabase = async () => {
-    try {
-      console.log('🔧 === INICIALIZANDO BANCO DE DADOS ===');
-      
-      // 1. FORÇA FOREIGN KEYS
-      await db.execAsync('PRAGMA foreign_keys = ON');
-      console.log('✅ Foreign keys ativadas');
-      
-      // 2. VERIFICA SE TABELAS EXISTEM
-      const tables = await db.getAllAsync(`
-        SELECT name FROM sqlite_master 
-        WHERE type='table' 
-        ORDER BY name
-      `);
-      console.log('📋 Tabelas existentes:', tables.map(t => t.name));
+ const setupDatabase = async () => {
+   try {
+     console.log('🔧 === INICIALIZANDO BANCO DE DADOS V4 ===');
+     
+     // 1. FORÇA FOREIGN KEYS
+     await db.execAsync('PRAGMA foreign_keys = ON');
+     console.log('✅ Foreign keys ativadas');
+     
+     // 2. CRIA TODAS AS TABELAS
+     await createAllTables();
+     
+     // 3. ATUALIZA ESTRUTURA DO BANCO
+     await updateDatabaseStructure();
+     
+     // 4. MIGRA SENHAS ANTIGAS
+     await migratePasswords();
+     
+     // 5. REMOVE TODOS OS DADOS DO SISTEMA
+     await removeSystemData();
+     
+     // 6. LIMPA DADOS ÓRFÃOS
+     await cleanOrphanData();
+     
+     // 7. VERIFICA TABELAS
+     await testTablesAccess();
+     
+     console.log('🎉 Banco inicializado com sucesso!');
+     setInitialized(true);
+     
+   } catch (error) {
+     console.error('❌ ERRO CRÍTICO na inicialização:', error);
+     setError(error.message);
+   }
+ };
 
-      // 3. CRIA TODAS AS TABELAS OBRIGATÓRIAS
-      await createAllTables();
-      
-      // 4. INSERE DADOS PADRÃO SE NECESSÁRIO
-      await insertDefaultData();
-      
-      // 5. VERIFICA FINAL
-      const finalTables = await db.getAllAsync(`
-        SELECT name FROM sqlite_master 
-        WHERE type='table' 
-        ORDER BY name
-      `);
-      console.log('✅ Tabelas finais:', finalTables.map(t => t.name));
-      
-      // 6. TESTA ACESSO ÀS TABELAS PRINCIPAIS
-      await testTablesAccess();
-      
-      console.log('🎉 Banco inicializado com sucesso!');
-      setInitialized(true);
-      
-    } catch (error) {
-      console.error('❌ ERRO CRÍTICO na inicialização:', error);
-      setError(error.message);
-    }
-  };
+ const createAllTables = async () => {
+   console.log('🏗️ Criando estrutura de tabelas...');
+   
+   // Users
+   await db.execAsync(`
+     CREATE TABLE IF NOT EXISTS users (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       name TEXT NOT NULL,
+       email TEXT NOT NULL UNIQUE,
+       password TEXT NOT NULL,
+       created_at TEXT DEFAULT (datetime('now')),
+       last_login TEXT,
+       preferences TEXT,
+       is_active INTEGER DEFAULT 1
+     );
+   `);
+   console.log('✅ Tabela users criada');
+   
+   // Categories - COM user_id OBRIGATÓRIO
+   await db.execAsync(`
+     CREATE TABLE IF NOT EXISTS categories (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       name TEXT NOT NULL,
+       icon TEXT DEFAULT '📂',
+       user_id INTEGER NOT NULL,
+       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+       UNIQUE(name, user_id)
+     );
+   `);
+   console.log('✅ Tabela categories criada');
 
-  const createAllTables = async () => {
-    console.log('🏗️ Criando estrutura de tabelas...');
-    
-    // Categories (PRIMEIRA - outras dependem dela)
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS categories (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL UNIQUE,
-        icon TEXT DEFAULT '📂'
-      );
-    `);
-    console.log('✅ Tabela categories criada');
+   // Payment Methods - COM user_id OBRIGATÓRIO
+   await db.execAsync(`
+     CREATE TABLE IF NOT EXISTS payment_methods (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       name TEXT NOT NULL,
+       icon TEXT DEFAULT '💳',
+       user_id INTEGER NOT NULL,
+       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+       UNIQUE(name, user_id)
+     );
+   `);
+   console.log('✅ Tabela payment_methods criada');
 
-    // Payment Methods (NOVA TABELA)
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS payment_methods (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL UNIQUE,
-        icon TEXT DEFAULT '💳'
-      );
-    `);
-    console.log('✅ Tabela payment_methods criada');
+   // Establishments
+   await db.execAsync(`
+     CREATE TABLE IF NOT EXISTS establishments (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       name TEXT NOT NULL,
+       category TEXT,
+       street TEXT,
+       number TEXT,
+       district TEXT,
+       city TEXT,
+       state TEXT,
+       zipcode TEXT,
+       phone TEXT,
+       latitude REAL,
+       longitude REAL,
+       created_at TEXT DEFAULT (datetime('now')),
+       user_id INTEGER NOT NULL,
+       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+     );
+   `);
+   console.log('✅ Tabela establishments criada');
 
-    // Establishments
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS establishments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        category TEXT,
-        street TEXT,
-        number TEXT,
-        district TEXT,
-        city TEXT,
-        state TEXT,
-        zipcode TEXT,
-        phone TEXT,
-        latitude REAL,
-        longitude REAL,
-        created_at TEXT DEFAULT (datetime('now'))
-      );
-    `);
-    console.log('✅ Tabela establishments criada');
+   // Locations
+   await db.execAsync(`
+     CREATE TABLE IF NOT EXISTS locations (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       lat REAL NOT NULL,
+       lng REAL NOT NULL,
+       address TEXT,
+       establishment TEXT
+     );
+   `);
+   console.log('✅ Tabela locations criada');
 
-    // Locations (legacy)
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS locations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        lat REAL NOT NULL,
-        lng REAL NOT NULL,
-        address TEXT,
-        establishment TEXT
-      );
-    `);
-    console.log('✅ Tabela locations criada');
+   // Expenses
+   await db.execAsync(`
+     CREATE TABLE IF NOT EXISTS expenses (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       description TEXT NOT NULL,
+       amount REAL NOT NULL,
+       date TEXT NOT NULL DEFAULT (datetime('now')),
+       categoryId INTEGER,
+       payment_method_id INTEGER,
+       location_id INTEGER,
+       establishment_id INTEGER,
+       user_id INTEGER NOT NULL,
+       FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE SET NULL,
+       FOREIGN KEY (payment_method_id) REFERENCES payment_methods(id) ON DELETE SET NULL,
+       FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL,
+       FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE SET NULL,
+       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+     );
+   `);
+   console.log('✅ Tabela expenses criada');
 
-    // Primeiro, vamos verificar se a coluna payment_method_id já existe
-    try {
-      const tableInfo = await db.getAllAsync(`PRAGMA table_info(expenses)`);
-      const hasPaymentMethodColumn = tableInfo.some(col => col.name === 'payment_method_id');
-      
-      if (!hasPaymentMethodColumn) {
-        console.log('🔧 Adicionando coluna payment_method_id à tabela expenses...');
-        await db.execAsync(`ALTER TABLE expenses ADD COLUMN payment_method_id INTEGER REFERENCES payment_methods(id) ON DELETE SET NULL`);
-        console.log('✅ Coluna payment_method_id adicionada');
-      }
-    } catch (alterError) {
-      console.log('⚠️ Tentando criar tabela expenses do zero...');
-      
-      // Se falhar, cria a tabela do zero
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS expenses (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          description TEXT NOT NULL,
-          amount REAL NOT NULL,
-          date TEXT NOT NULL DEFAULT (datetime('now')),
-          categoryId INTEGER,
-          payment_method_id INTEGER,
-          location_id INTEGER,
-          establishment_id INTEGER,
-          FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE SET NULL,
-          FOREIGN KEY (payment_method_id) REFERENCES payment_methods(id) ON DELETE SET NULL,
-          FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL,
-          FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE SET NULL
-        );
-      `);
-      console.log('✅ Tabela expenses criada com payment_method_id');
-    }
+   // Contacts
+   await db.execAsync(`
+     CREATE TABLE IF NOT EXISTS contacts (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       name TEXT NOT NULL,
+       phone TEXT NOT NULL
+     );
+   `);
+   console.log('✅ Tabela contacts criada');
+ };
 
-    // Contacts
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS contacts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        phone TEXT NOT NULL
-      );
-    `);
-    console.log('✅ Tabela contacts criada');
-  };
+ const updateDatabaseStructure = async () => {
+   console.log('🔄 Atualizando estrutura do banco...');
+   
+   try {
+     // Adiciona user_id como NOT NULL nas tabelas que precisam
+     const tables = ['categories', 'payment_methods', 'establishments', 'expenses'];
+     
+     for (const table of tables) {
+       try {
+         const columns = await db.getAllAsync(`PRAGMA table_info(${table})`);
+         const hasUserId = columns.some(col => col.name === 'user_id');
+         
+         if (!hasUserId) {
+           console.log(`➕ Adicionando user_id em ${table}...`);
+           
+           // Criar tabela temporária com nova estrutura
+           await db.execAsync(`
+             CREATE TABLE ${table}_temp AS 
+             SELECT * FROM ${table} WHERE 0
+           `);
+           
+           // Adicionar coluna user_id
+           await db.execAsync(`
+             ALTER TABLE ${table}_temp 
+             ADD COLUMN user_id INTEGER NOT NULL DEFAULT 1
+           `);
+           
+           // Remover o default após criação
+           // SQLite não permite remover default diretamente, então recriamos
+           
+           // Dropar tabela antiga
+           await db.execAsync(`DROP TABLE ${table}`);
+           
+           // Renomear tabela temporária
+           await db.execAsync(`ALTER TABLE ${table}_temp RENAME TO ${table}`);
+           
+           console.log(`✅ user_id adicionado em ${table}`);
+         }
+       } catch (err) {
+         console.warn(`⚠️ Erro ao verificar/adicionar user_id em ${table}:`, err.message);
+       }
+     }
 
-  const insertDefaultData = async () => {
-    console.log('📋 Verificando dados padrão...');
-    
-    // Só insere categorias se a tabela estiver vazia
-    const categoriesCount = await db.getFirstAsync('SELECT COUNT(*) as count FROM categories');
-    
-    if (categoriesCount.count === 0) {
-      console.log('➕ Inserindo categorias padrão...');
-      
-      const defaultCategories = [
-        { name: 'Alimentação', icon: '🍽️' },
-        { name: 'Transporte', icon: '🚗' },
-        { name: 'Lazer', icon: '🎮' },
-        { name: 'Saúde', icon: '🏥' },
-        { name: 'Casa', icon: '🏠' },
-        { name: 'Educação', icon: '📚' },
-        { name: 'Compras', icon: '🛒' },
-        { name: 'Outros', icon: '📦' }
-      ];
+     // Adiciona índices para melhor performance
+     await createIndexes();
+     
+   } catch (error) {
+     console.warn('⚠️ Erro ao atualizar estrutura:', error.message);
+   }
+ };
 
-      for (const category of defaultCategories) {
-        try {
-          await db.runAsync(
-            'INSERT INTO categories (name, icon) VALUES (?, ?)',
-            [category.name, category.icon]
-          );
-          console.log(`✅ Categoria inserida: ${category.name}`);
-        } catch (error) {
-          console.warn(`⚠️ Erro ao inserir categoria ${category.name}:`, error.message);
-        }
-      }
-    } else {
-      console.log('✅ Categorias já existem, pulando inserção');
-    }
+ const createIndexes = async () => {
+   console.log('📇 Criando índices...');
+   
+   try {
+     // Índices para melhor performance
+     await db.execAsync(`
+       CREATE INDEX IF NOT EXISTS idx_categories_user 
+       ON categories(user_id);
+       
+       CREATE INDEX IF NOT EXISTS idx_payment_methods_user 
+       ON payment_methods(user_id);
+       
+       CREATE INDEX IF NOT EXISTS idx_expenses_user 
+       ON expenses(user_id);
+       
+       CREATE INDEX IF NOT EXISTS idx_expenses_date 
+       ON expenses(date);
+       
+       CREATE INDEX IF NOT EXISTS idx_expenses_category 
+       ON expenses(categoryId);
+       
+       CREATE INDEX IF NOT EXISTS idx_establishments_user 
+       ON establishments(user_id);
+     `);
+     
+     console.log('✅ Índices criados');
+   } catch (error) {
+     console.warn('⚠️ Erro ao criar índices:', error.message);
+   }
+ };
 
-    // Só insere métodos de pagamento se a tabela estiver vazia
-    const paymentMethodsCount = await db.getFirstAsync('SELECT COUNT(*) as count FROM payment_methods');
-    
-    if (paymentMethodsCount.count === 0) {
-      console.log('➕ Inserindo métodos de pagamento padrão...');
-      
-      const defaultPaymentMethods = [
-        { name: 'Dinheiro', icon: '💵' },
-        { name: 'Cartão de Crédito', icon: '💳' },
-        { name: 'Cartão de Débito', icon: '💳' },
-        { name: 'PIX', icon: '📱' },
-        { name: 'Boleto', icon: '📄' },
-        { name: 'Vale Refeição', icon: '🎫' },
-        { name: 'Vale Alimentação', icon: '🎟️' },
-        { name: 'Transferência', icon: '🏦' }
-      ];
+ const removeSystemData = async () => {
+   console.log('🧹 Removendo dados do sistema...');
+   
+   try {
+     // Remove usuário sistema se existir
+     const systemUser = await db.getFirstAsync(
+       "SELECT id FROM users WHERE email = 'system@default.com'"
+     );
+     
+     if (systemUser) {
+       console.log('🗑️ Removendo usuário sistema e seus dados...');
+       
+       // Remove todas as categorias do sistema
+       const categoriesDeleted = await db.runAsync(`
+         DELETE FROM categories 
+         WHERE user_id = ? OR user_id IS NULL
+       `, [systemUser.id]);
+       
+       console.log(`✅ ${categoriesDeleted.changes} categorias do sistema removidas`);
+       
+       // Remove todos os métodos de pagamento do sistema
+       const methodsDeleted = await db.runAsync(`
+         DELETE FROM payment_methods 
+         WHERE user_id = ? OR user_id IS NULL
+       `, [systemUser.id]);
+       
+       console.log(`✅ ${methodsDeleted.changes} métodos de pagamento do sistema removidos`);
+       
+       // Remove o usuário sistema
+       await db.runAsync(
+         "DELETE FROM users WHERE email = 'system@default.com'"
+       );
+       
+       console.log('✅ Usuário sistema removido');
+     }
+     
+     // Remove quaisquer categorias órfãs (sem user_id válido)
+     const orphanCategories = await db.runAsync(`
+       DELETE FROM categories 
+       WHERE user_id NOT IN (SELECT id FROM users)
+     `);
+     
+     if (orphanCategories.changes > 0) {
+       console.log(`✅ ${orphanCategories.changes} categorias órfãs removidas`);
+     }
+     
+     // Remove quaisquer métodos de pagamento órfãos
+     const orphanMethods = await db.runAsync(`
+       DELETE FROM payment_methods 
+       WHERE user_id NOT IN (SELECT id FROM users)
+     `);
+     
+     if (orphanMethods.changes > 0) {
+       console.log(`✅ ${orphanMethods.changes} métodos de pagamento órfãos removidos`);
+     }
+     
+   } catch (error) {
+     console.warn('⚠️ Erro ao remover dados do sistema:', error.message);
+   }
+ };
 
-      for (const method of defaultPaymentMethods) {
-        try {
-          await db.runAsync(
-            'INSERT INTO payment_methods (name, icon) VALUES (?, ?)',
-            [method.name, method.icon]
-          );
-          console.log(`✅ Método de pagamento inserido: ${method.name}`);
-        } catch (error) {
-          console.warn(`⚠️ Erro ao inserir método ${method.name}:`, error.message);
-        }
-      }
-    } else {
-      console.log('✅ Métodos de pagamento já existem, pulando inserção');
-    }
-  };
+ const cleanOrphanData = async () => {
+   console.log('🧹 Limpando dados órfãos...');
+   
+   try {
+     // Remove despesas com referências inválidas
+     const orphanExpenses = await db.runAsync(`
+       DELETE FROM expenses 
+       WHERE user_id NOT IN (SELECT id FROM users)
+     `);
+     
+     if (orphanExpenses.changes > 0) {
+       console.log(`✅ ${orphanExpenses.changes} despesas órfãs removidas`);
+     }
+     
+     // Remove estabelecimentos órfãos
+     const orphanEstablishments = await db.runAsync(`
+       DELETE FROM establishments 
+       WHERE user_id NOT IN (SELECT id FROM users)
+     `);
+     
+     if (orphanEstablishments.changes > 0) {
+       console.log(`✅ ${orphanEstablishments.changes} estabelecimentos órfãos removidos`);
+     }
+     
+     // Otimiza o banco de dados
+     await db.execAsync('VACUUM');
+     console.log('✅ Banco de dados otimizado');
+     
+   } catch (error) {
+     console.warn('⚠️ Erro ao limpar dados órfãos:', error.message);
+   }
+ };
 
-  const testTablesAccess = async () => {
-    console.log('🧪 Testando acesso às tabelas...');
-    
-    try {
-      const categoriesCount = await db.getFirstAsync('SELECT COUNT(*) as count FROM categories');
-      console.log(`✅ Categories: ${categoriesCount.count} registros`);
-      
-      const paymentMethodsCount = await db.getFirstAsync('SELECT COUNT(*) as count FROM payment_methods');
-      console.log(`✅ Payment Methods: ${paymentMethodsCount.count} registros`);
-      
-      const expensesCount = await db.getFirstAsync('SELECT COUNT(*) as count FROM expenses');
-      console.log(`✅ Expenses: ${expensesCount.count} registros`);
-      
-      const establishmentsCount = await db.getFirstAsync('SELECT COUNT(*) as count FROM establishments');
-      console.log(`✅ Establishments: ${establishmentsCount.count} registros`);
-      
-    } catch (error) {
-      throw new Error(`Erro ao testar tabelas: ${error.message}`);
-    }
-  };
+ const migratePasswords = async () => {
+   console.log('🔐 Verificando migração de senhas...');
+   
+   try {
+     const users = await db.getAllAsync('SELECT id, password FROM users');
+     let migrated = 0;
+     
+     for (const user of users) {
+       if (needsPasswordMigration(user.password)) {
+         console.log(`🔄 Migrando senha do usuário ${user.id}...`);
+         const hashedPassword = hashPassword(user.password);
+         
+         await db.runAsync(
+           'UPDATE users SET password = ? WHERE id = ?',
+           [hashedPassword, user.id]
+         );
+         migrated++;
+       }
+     }
+     
+     if (migrated > 0) {
+       console.log(`✅ ${migrated} senha(s) migrada(s) com sucesso`);
+     } else {
+       console.log('✅ Todas as senhas já estão atualizadas');
+     }
+     
+   } catch (error) {
+     console.warn('⚠️ Erro na migração de senhas:', error.message);
+   }
+ };
 
-  // 🔴 ESTADO DE ERRO
-  if (error) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.errorTitle}>⚠️ Erro de Inicialização</Text>
-        <Text style={styles.errorMessage}>{error}</Text>
-        <Text style={styles.errorSubtitle}>
-          Reinicie o aplicativo. Se persistir, limpe os dados do app.
-        </Text>
-      </View>
-    );
-  }
+ const testTablesAccess = async () => {
+   console.log('🧪 Testando acesso às tabelas...');
+   
+   try {
+     const tables = ['users', 'categories', 'payment_methods', 'expenses', 'establishments', 'locations'];
+     
+     for (const table of tables) {
+       const count = await db.getFirstAsync(`SELECT COUNT(*) as count FROM ${table}`);
+       console.log(`✅ ${table}: ${count.count} registros`);
+     }
+     
+     // Verifica integridade dos relacionamentos
+     const integrityCheck = await db.getFirstAsync('PRAGMA integrity_check');
+     console.log('✅ Integridade do banco:', integrityCheck.integrity_check);
+     
+   } catch (error) {
+     throw new Error(`Erro ao testar tabelas: ${error.message}`);
+   }
+ };
 
-  // 🔄 ESTADO DE LOADING
-  if (!initialized) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#10b981" />
-        <Text style={styles.loadingTitle}>Preparando aplicativo...</Text>
-        <Text style={styles.loadingSubtitle}>
-          Configurando banco de dados pela primeira vez
-        </Text>
-      </View>
-    );
-  }
+ // ESTADO DE ERRO
+ if (error) {
+   return (
+     <View style={styles.container}>
+       <Text style={styles.errorTitle}>⚠️ Erro de Inicialização</Text>
+       <Text style={styles.errorMessage}>{error}</Text>
+       <Text style={styles.errorSubtitle}>
+         Por favor, reinicie o aplicativo. Se o problema persistir, reinstale o app.
+       </Text>
+     </View>
+   );
+ }
 
-  // ✅ BANCO PRONTO - RENDERIZA CHILDREN
-  return children;
+ // ESTADO DE LOADING
+ if (!initialized) {
+   return (
+     <View style={styles.container}>
+       <ActivityIndicator size="large" color="#10b981" />
+       <Text style={styles.loadingTitle}>Preparando aplicativo...</Text>
+       <Text style={styles.loadingSubtitle}>
+         Configurando banco de dados...
+       </Text>
+     </View>
+   );
+ }
+
+ // BANCO PRONTO - RENDERIZA CHILDREN
+ return children;
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    padding: 40,
-  },
-  loadingTitle: {
-    marginTop: 20,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    textAlign: 'center',
-  },
-  loadingSubtitle: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#6b7280',
-    textAlign: 'center',
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ef4444',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  errorMessage: {
-    fontSize: 16,
-    color: '#374151',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  errorSubtitle: {
-    fontSize: 14,
-    color: '#6b7280',
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
+ container: {
+   flex: 1,
+   justifyContent: 'center',
+   alignItems: 'center',
+   backgroundColor: '#f8fafc',
+   padding: 40,
+ },
+ loadingTitle: {
+   marginTop: 20,
+   fontSize: 18,
+   fontWeight: 'bold',
+   color: '#1f2937',
+   textAlign: 'center',
+ },
+ loadingSubtitle: {
+   marginTop: 8,
+   fontSize: 14,
+   color: '#6b7280',
+   textAlign: 'center',
+ },
+ errorTitle: {
+   fontSize: 20,
+   fontWeight: 'bold',
+   color: '#ef4444',
+   marginBottom: 16,
+   textAlign: 'center',
+ },
+ errorMessage: {
+   fontSize: 16,
+   color: '#374151',
+   marginBottom: 12,
+   textAlign: 'center',
+ },
+ errorSubtitle: {
+   fontSize: 14,
+   color: '#6b7280',
+   textAlign: 'center',
+   fontStyle: 'italic',
+ },
 });

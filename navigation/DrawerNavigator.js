@@ -1,4 +1,4 @@
-// navigation/DrawerNavigator.js - VERSÃO ATUALIZADA
+// navigation/DrawerNavigator.js - VERSÃO COMPLETA COM AUTENTICAÇÃO
 import Dashboard from '../components/Dashboard';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import CategoryManager from '../components/CategoryManager';
@@ -8,6 +8,7 @@ import GroupedExpenseList from '../components/GroupedExpenseList';
 import AnnualExpenseSummary from '../components/AnnualExpenseSummary';
 import PaymentMethodManager from '../components/PaymentMethodManager';
 import MonthlyReport from '../components/MonthlyReport';
+import ProfileScreen from '../screens/ProfileScreen'; // NOVO IMPORT
 
 const Drawer = createDrawerNavigator();
 
@@ -121,6 +122,15 @@ export default function DrawerNavigator() {
         options={{ 
           drawerLabel: "💳 Formas de Pagamento",
           title: "Métodos de Pagamento"
+        }}
+      />
+      {/* NOVA TELA DE PERFIL */}
+      <Drawer.Screen
+        name="Perfil"
+        component={ProfileScreen}
+        options={{ 
+          drawerLabel: "👤 Meu Perfil",
+          title: "Perfil do Usuário"
         }}
       />
     </Drawer.Navigator>

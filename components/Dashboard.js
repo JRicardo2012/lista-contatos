@@ -1,200 +1,90 @@
-// components/Dashboard.js - VERSÃO 2.0 COM MELHORIAS
-// 🆕 NOVAS FUNCIONALIDADES:
-// - Projeção de gastos até fim do mês
-// - Contador de dias sem gastos com gamificação
-// - Top 3 estabelecimentos mais visitados
-// - Detecção de gastos atípicos
-// - Análise de padrões semanais
-// - Insights priorizados e inteligentes
+// components/Dashboard.js  
+// SUBSTITUIR O ARQUIVO EXISTENTE POR ESTE CÓDIGO COMPLETO
 
-import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
+  TouchableOpacity,
   Alert,
   Animated,
   Dimensions,
   StatusBar,
+  ActivityIndicator,
   Platform
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { PieChart, LineChart } from 'react-native-chart-kit';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { formatCurrency, formatDate } from '../utils/helpers';
+import { LineChart, PieChart } from 'react-native-chart-kit';
+import { useAuth } from '../services/AuthContext'; // NOVO IMPORT
 
 const { width: screenWidth } = Dimensions.get('window');
 
-export default function Dashboard() {
+// Listener global para atualização automática
+global.expenseListeners = global.expenseListeners || [];
+
+export default function Dashboard({ navigation }) {
   const db = useSQLiteContext();
-  const navigation = useNavigation();
+  const { user } = useAuth(); // NOVO: pega o usuário logado
   
-  // 🔧 ESTADOS SIMPLIFICADOS
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isReady, setIsReady] = useState(false);
-  const [dashboardData, setDashboardData] = useState({
-    todaySpending: 0,
-    weekSpending: 0,
-    monthSpending: 0,
-    yearSpending: 0,
-    todayTransactions: 0,
-    weekTransactions: 0,
-    monthTransactions: 0,
-    topCategory: null,
-    recentExpenses: [],
-    categoryDistribution: [],
-    weeklyTrend: [],
-    monthlyComparison: { current: 0, previous: 0 },
-    insights: [],
-    // 🆕 NOVOS CAMPOS DE DADOS
-    monthProjection: null,
-    daysWithoutExpenses: null,
-    topEstablishments: [],
-    anomalousExpenses: [],
-    weekdayAnalysis: null
-  });
+  // Estados principais
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState('month');
+  
+  // Dados de despesas
+  const [todayTotal, setTodayTotal] = useState(0);
+  const [todayCount, setTodayCount] = useState(0);
+  const [weekTotal, setWeekTotal] = useState(0);
+  const [monthTotal, setMonthTotal] = useState(0);
+  const [lastMonthTotal, setLastMonthTotal] = useState(0);
+  const [yearTotal, setYearTotal] = useState(0);
+  const [categoryData, setCategoryData] = useState([]);
+  const [weeklyData, setWeeklyData] = useState([]);
+  const [recentExpenses, setRecentExpenses] = useState([]);
+  const [monthlyTrend, setMonthlyTrend] = useState([]);
+  const [topEstablishments, setTopEstablishments] = useState([]);
+  
+  // Estados de insights
+  const [insights, setInsights] = useState([]);
+  const [daysWithoutExpenses, setDaysWithoutExpenses] = useState(0);
+  const [anomalies, setAnomalies] = useState([]);
+  
+  // Animações
+  const fadeAnim = useState(new Animated.Value(0))[0];
+  const slideAnim = useState(new Animated.Value(50))[0];
 
-  // 🎬 ANIMAÇÕES CORRIGIDAS - Array fixo para 4 cards
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-  const cardAnimations = useRef([
-    new Animated.Value(1),
-    new Animated.Value(1),  
-    new Animated.Value(1),
-    new Animated.Value(1),
-  ]).current;
-  const hasAnimated = useRef(false);
+  // Registra listener para atualizações automáticas
+  useEffect(() => {
+    const listener = () => {
+      console.log('📡 Dashboard notificado sobre mudança nas despesas');
+      loadAllData();
+    };
 
-  // 🔄 DEBOUNCE
-  const debounceTimeout = useRef(null);
-  const debounceCall = useCallback((func, delay = 300) => {
-    if (debounceTimeout.current) {
-      clearTimeout(debounceTimeout.current);
-    }
-    debounceTimeout.current = setTimeout(func, delay);
+    global.expenseListeners.push(listener);
+
+    return () => {
+      const index = global.expenseListeners.indexOf(listener);
+      if (index > -1) {
+        global.expenseListeners.splice(index, 1);
+      }
+    };
   }, []);
 
-  // 🚀 FUNÇÃO PRINCIPAL DE CARREGAMENTO - ATUALIZADA
-  const loadDashboardData = useCallback(async (isRefresh = false) => {
-    if (!db) return;
+  // Carrega dados na montagem
+  useEffect(() => {
+    loadAllData();
+    startAnimations();
+  }, [db, user]); // ATUALIZADO: recarrega quando usuário muda
 
-    try {
-      console.log('🔄 Carregando dashboard...', { isRefresh, isReady });
-      
-      if (isRefresh) {
-        setIsRefreshing(true);
-      } else if (!isReady) {
-        setIsInitialLoading(true);
-      }
-
-      // 🆕 CHAMADAS PARALELAS INCLUINDO NOVAS FUNÇÕES
-      const [
-        todayData,
-        weekData,
-        monthData,
-        yearData,
-        categoryData,
-        recentData,
-        weeklyTrendData,
-        previousMonthData,
-        // 🆕 NOVAS CHAMADAS
-        projectionData,
-        daysWithoutData,
-        topEstablishments,
-        anomalousExpenses,
-        weekdayAnalysis
-      ] = await Promise.all([
-        getTodayData(),
-        getWeekData(),
-        getMonthData(),
-        getYearData(),
-        getCategoryDistribution(),
-        getRecentExpenses(),
-        getWeeklyTrend(),
-        getPreviousMonthData(),
-        // 🆕 NOVAS FUNÇÕES
-        getMonthProjection(),
-        getDaysWithoutExpenses(),
-        getTopEstablishments(),
-        getAnomalousExpenses(),
-        getWeekdayAnalysis()
-      ]);
-
-      // 🆕 GERA INSIGHTS APRIMORADOS
-      const insights = generateEnhancedInsights({
-        today: todayData,
-        week: weekData,
-        month: monthData,
-        year: yearData,
-        categories: categoryData,
-        previousMonth: previousMonthData,
-        projection: projectionData,
-        daysWithout: daysWithoutData,
-        anomalies: anomalousExpenses,
-        weekday: weekdayAnalysis
-      });
-
-      // 🆕 ESTRUTURA DE DADOS EXPANDIDA
-      const newData = {
-        todaySpending: todayData.total,
-        weekSpending: weekData.total,
-        monthSpending: monthData.total,
-        yearSpending: yearData.total,
-        todayTransactions: todayData.count,
-        weekTransactions: weekData.count,
-        monthTransactions: monthData.count,
-        topCategory: categoryData[0] || null,
-        recentExpenses: recentData,
-        categoryDistribution: categoryData.slice(0, 5),
-        weeklyTrend: weeklyTrendData,
-        monthlyComparison: {
-          current: monthData.total,
-          previous: previousMonthData.total
-        },
-        insights,
-        // 🆕 NOVOS DADOS
-        monthProjection: projectionData,
-        daysWithoutExpenses: daysWithoutData,
-        topEstablishments: topEstablishments,
-        anomalousExpenses: anomalousExpenses,
-        weekdayAnalysis: weekdayAnalysis
-      };
-
-      setDashboardData(newData);
-
-      if (!hasAnimated.current && !isRefresh) {
-        hasAnimated.current = true;
-        startMainAnimations();
-      }
-
-      if (!isReady) {
-        setIsReady(true);
-      }
-
-    } catch (error) {
-      console.error('❌ Erro ao carregar dashboard:', error);
-      if (!isRefresh) {
-        Alert.alert('Erro', 'Não foi possível carregar os dados do dashboard.');
-      }
-    } finally {
-      setIsInitialLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [db, isReady]);
-
-  // 🎬 ANIMAÇÕES PRINCIPAIS
-  const startMainAnimations = useCallback(() => {
-    fadeAnim.setValue(0);
-    slideAnim.setValue(30);
-
+  const startAnimations = () => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 600,
+        duration: 800,
         useNativeDriver: true,
       }),
       Animated.spring(slideAnim, {
@@ -204,58 +94,9 @@ export default function Dashboard() {
         useNativeDriver: true,
       })
     ]).start();
+  };
 
-    console.log('✅ Animações principais iniciadas');
-  }, [fadeAnim, slideAnim]);
-
-  // 🔄 CARREGAMENTO INICIAL
-  useEffect(() => {
-    if (db && !isReady) {
-      debounceCall(() => {
-        loadDashboardData(false);
-      }, 100);
-    }
-  }, [db, isReady, loadDashboardData, debounceCall]);
-
-  // 🔄 RECARREGA QUANDO A TELA FICA ATIVA
-  useFocusEffect(
-    useCallback(() => {
-      if (db && isReady) {
-        debounceCall(() => {
-          loadDashboardData(false);
-        }, 200);
-      }
-    }, [db, isReady, loadDashboardData, debounceCall])
-  );
-
-  // 🔄 SISTEMA DE NOTIFICAÇÃO AUTOMÁTICA
-  useEffect(() => {
-    if (!global.expenseListeners) {
-      global.expenseListeners = [];
-    }
-
-    const updateFunction = () => {
-      if (db && isReady && !isRefreshing) {
-        debounceCall(() => {
-          console.log('📢 Recebeu notificação - atualizando dashboard...');
-          loadDashboardData(false);
-        }, 500);
-      }
-    };
-
-    global.expenseListeners.push(updateFunction);
-
-    return () => {
-      if (global.expenseListeners) {
-        const index = global.expenseListeners.indexOf(updateFunction);
-        if (index > -1) {
-          global.expenseListeners.splice(index, 1);
-        }
-      }
-    };
-  }, [db, isReady, isRefreshing, loadDashboardData, debounceCall]);
-
-  // 📊 FUNÇÕES DE DADOS EXISTENTES
+  // ATUALIZADO: Todas as queries agora filtram por user_id
   const getTodayData = async () => {
     const result = await db.getFirstAsync(`
       SELECT 
@@ -263,1881 +104,1017 @@ export default function Dashboard() {
         COUNT(*) as count
       FROM expenses 
       WHERE DATE(date) = DATE('now', 'localtime')
-    `);
-    
-    if (!result || result.total === 0) {
-      return { total: 127.50, count: 3 };
-    }
+      AND user_id = ?
+    `, [user.id]);
     
     return result || { total: 0, count: 0 };
   };
 
   const getWeekData = async () => {
     const result = await db.getFirstAsync(`
-      SELECT 
-        COALESCE(SUM(CAST(amount AS REAL)), 0) as total,
-        COUNT(*) as count
+      SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total
       FROM expenses 
-      WHERE DATE(date) >= DATE('now', 'localtime', '-7 days')
-    `);
+      WHERE DATE(date) >= DATE('now', '-7 days', 'localtime')
+      AND user_id = ?
+    `, [user.id]);
     
-    if (!result || result.total === 0) {
-      return { total: 856.40, count: 15 };
-    }
-    
-    return result || { total: 0, count: 0 };
+    return result?.total || 0;
   };
 
   const getMonthData = async () => {
     const result = await db.getFirstAsync(`
-      SELECT 
-        COALESCE(SUM(CAST(amount AS REAL)), 0) as total,
-        COUNT(*) as count
+      SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total
       FROM expenses 
       WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now', 'localtime')
-    `);
+      AND user_id = ?
+    `, [user.id]);
     
-    if (!result || result.total === 0) {
-      return { total: 2847.90, count: 47 };
-    }
+    return result?.total || 0;
+  };
+
+  const getLastMonthData = async () => {
+    const result = await db.getFirstAsync(`
+      SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total
+      FROM expenses 
+      WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now', '-1 month', 'localtime')
+      AND user_id = ?
+    `, [user.id]);
     
-    return result || { total: 0, count: 0 };
+    return result?.total || 0;
   };
 
   const getYearData = async () => {
     const result = await db.getFirstAsync(`
-      SELECT 
-        COALESCE(SUM(CAST(amount AS REAL)), 0) as total,
-        COUNT(*) as count
+      SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total
       FROM expenses 
       WHERE strftime('%Y', date) = strftime('%Y', 'now', 'localtime')
-    `);
+      AND user_id = ?
+    `, [user.id]);
     
-    if (!result || result.total === 0) {
-      return { total: 15420.65, count: 234 };
-    }
-    
-    return result || { total: 0, count: 0 };
+    return result?.total || 0;
   };
 
-  const getCategoryDistribution = async () => {
+  const getCategoryData = async () => {
     const results = await db.getAllAsync(`
       SELECT 
-        COALESCE(c.name, 'Sem categoria') as category,
-        COALESCE(c.icon, '📦') as icon,
-        SUM(CAST(e.amount AS REAL)) as total,
-        COUNT(*) as count
-      FROM expenses e
-      LEFT JOIN categories c ON e.categoryId = c.id
-      WHERE strftime('%Y-%m', e.date) = strftime('%Y-%m', 'now', 'localtime')
+        c.name,
+        c.icon,
+        COALESCE(SUM(CAST(e.amount AS REAL)), 0) as total,
+        COUNT(e.id) as count
+      FROM categories c
+      LEFT JOIN expenses e ON c.id = e.categoryId 
+        AND e.user_id = ?
+        AND DATE(e.date) >= DATE('now', '-30 days', 'localtime')
       GROUP BY c.id, c.name, c.icon
+      HAVING total > 0
       ORDER BY total DESC
-      LIMIT 8
-    `);
-
-    if (!results || results.length === 0) {
-      return [
-        { category: 'Alimentação', icon: '🍽️', total: 856.40, count: 18, color: getColorForIndex(0) },
-        { category: 'Transporte', icon: '🚗', total: 624.20, count: 12, color: getColorForIndex(1) },
-        { category: 'Lazer', icon: '🎮', total: 385.70, count: 8, color: getColorForIndex(2) },
-        { category: 'Saúde', icon: '🏥', total: 247.90, count: 5, color: getColorForIndex(3) },
-        { category: 'Casa', icon: '🏠', total: 456.80, count: 6, color: getColorForIndex(4) },
-        { category: 'Educação', icon: '📚', total: 189.50, count: 3, color: getColorForIndex(5) }
-      ];
-    }
-
-    return results.map((item, index) => ({
-      ...item,
-      color: getColorForIndex(index)
-    }));
-  };
-
-  const getRecentExpenses = async () => {
-    const result = await db.getAllAsync(`
-      SELECT 
-        e.id,
-        e.description,
-        CAST(e.amount AS REAL) as amount,
-        e.date,
-        COALESCE(c.name, 'Sem categoria') as category,
-        COALESCE(c.icon, '📦') as icon
-      FROM expenses e
-      LEFT JOIN categories c ON e.categoryId = c.id
-      ORDER BY e.date DESC
-      LIMIT 8
-    `);
-
-    if (!result || result.length === 0) {
-      const today = new Date().toISOString();
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const dayBefore = new Date();
-      dayBefore.setDate(dayBefore.getDate() - 2);
-      
-      return [
-        {
-          id: 'demo1',
-          description: 'Almoço no restaurante',
-          amount: 45.50,
-          date: today,
-          category: 'Alimentação',
-          icon: '🍽️'
-        },
-        {
-          id: 'demo2', 
-          description: 'Combustível',
-          amount: 85.00,
-          date: today,
-          category: 'Transporte',
-          icon: '⛽'
-        },
-        {
-          id: 'demo3',
-          description: 'Supermercado',
-          amount: 156.80,
-          date: yesterday.toISOString(),
-          category: 'Alimentação', 
-          icon: '🛒'
-        },
-        {
-          id: 'demo4',
-          description: 'Farmácia',
-          amount: 32.90,
-          date: yesterday.toISOString(),
-          category: 'Saúde',
-          icon: '💊'
-        },
-        {
-          id: 'demo5',
-          description: 'Netflix',
-          amount: 25.90,
-          date: dayBefore.toISOString(),
-          category: 'Lazer',
-          icon: '🎬'
-        }
-      ];
-    }
+    `, [user.id]);
     
-    return result;
+    return results || [];
   };
 
-  const getWeeklyTrend = async () => {
+  const getWeeklyData = async () => {
     const results = await db.getAllAsync(`
       SELECT 
-        DATE(date, 'localtime') as date,
-        SUM(CAST(amount AS REAL)) as total
-      FROM expenses 
-      WHERE DATE(date) >= DATE('now', 'localtime', '-7 days')
-      GROUP BY DATE(date, 'localtime')
-      ORDER BY date ASC
-    `);
-
+        DATE(date) as day,
+        strftime('%w', date) as weekday,
+        SUM(CAST(amount AS REAL)) as total,
+        COUNT(*) as count
+      FROM expenses
+      WHERE DATE(date) >= DATE('now', '-7 days', 'localtime')
+      AND user_id = ?
+      GROUP BY DATE(date)
+      ORDER BY DATE(date) ASC
+    `, [user.id]);
+    
+    const daysOfWeek = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     const last7Days = [];
+    
     for (let i = 6; i >= 0; i--) {
       const date = new Date();
       date.setDate(date.getDate() - i);
       const dateStr = date.toISOString().split('T')[0];
-      const found = results.find(r => r.date === dateStr);
       
-      let demoValue = 0;
-      if (!results || results.length === 0) {
-        const demoValues = [85.50, 134.20, 67.80, 198.40, 156.70, 89.30, 124.50];
-        demoValue = demoValues[6 - i] || 0;
-      }
-      
+      const dayData = results.find(r => r.day === dateStr);
       last7Days.push({
+        day: daysOfWeek[date.getDay()],
         date: dateStr,
-        total: found ? found.total : demoValue,
-        label: date.toLocaleDateString('pt-BR', { weekday: 'short' })
+        total: dayData ? dayData.total : 0,
+        count: dayData ? dayData.count : 0
       });
     }
-
+    
     return last7Days;
   };
 
-  const getPreviousMonthData = async () => {
+  const getRecentExpenses = async () => {
+    const results = await db.getAllAsync(`
+      SELECT 
+        e.*,
+        c.name as categoryName,
+        c.icon as categoryIcon,
+        est.name as establishmentName,
+        pm.name as paymentMethodName,
+        pm.icon as paymentMethodIcon
+      FROM expenses e
+      LEFT JOIN categories c ON e.categoryId = c.id
+      LEFT JOIN establishments est ON e.establishment_id = est.id
+      LEFT JOIN payment_methods pm ON e.payment_method_id = pm.id
+      WHERE e.user_id = ?
+      ORDER BY e.date DESC, e.id DESC
+      LIMIT 5
+    `, [user.id]);
+    
+    return results || [];
+  };
+
+  const getMonthlyTrend = async () => {
+    const results = await db.getAllAsync(`
+      SELECT 
+        strftime('%Y-%m', date) as month,
+        SUM(CAST(amount AS REAL)) as total
+      FROM expenses
+      WHERE date >= date('now', '-6 months')
+      AND user_id = ?
+      GROUP BY strftime('%Y-%m', date)
+      ORDER BY month ASC
+    `, [user.id]);
+    
+    const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    
+    return results.map(r => {
+      const [year, month] = r.month.split('-');
+      return {
+        month: months[parseInt(month) - 1],
+        total: r.total
+      };
+    });
+  };
+
+  const getTopEstablishments = async () => {
+    const results = await db.getAllAsync(`
+      SELECT 
+        est.name,
+        COUNT(e.id) as visit_count,
+        SUM(CAST(e.amount AS REAL)) as total_spent
+      FROM expenses e
+      INNER JOIN establishments est ON e.establishment_id = est.id
+      WHERE e.user_id = ?
+      AND DATE(e.date) >= DATE('now', '-30 days', 'localtime')
+      GROUP BY est.id, est.name
+      ORDER BY visit_count DESC, total_spent DESC
+      LIMIT 3
+    `, [user.id]);
+    
+    return results || [];
+  };
+
+  const getDaysWithoutExpenses = async () => {
     const result = await db.getFirstAsync(`
       SELECT 
-        COALESCE(SUM(CAST(amount AS REAL)), 0) as total
-      FROM expenses 
-      WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now', 'localtime', '-1 month')
-    `);
+        julianday('now', 'localtime') - julianday(MAX(date)) as days
+      FROM expenses
+      WHERE user_id = ?
+    `, [user.id]);
     
-    if (!result || result.total === 0) {
-      return { total: 2456.30 };
-    }
+    return Math.floor(result?.days || 0);
+  };
+
+  const detectAnomalies = async () => {
+    const avgResult = await db.getFirstAsync(`
+      SELECT AVG(daily_total) as avg_daily
+      FROM (
+        SELECT SUM(CAST(amount AS REAL)) as daily_total
+        FROM expenses
+        WHERE DATE(date) >= DATE('now', '-30 days', 'localtime')
+        AND user_id = ?
+        GROUP BY DATE(date)
+      )
+    `, [user.id]);
     
-    return result || { total: 0 };
+    const avgDaily = avgResult?.avg_daily || 0;
+    const threshold = avgDaily * 1.5;
+    
+    const anomalousExpenses = await db.getAllAsync(`
+      SELECT 
+        e.*,
+        c.name as categoryName,
+        c.icon as categoryIcon
+      FROM expenses e
+      LEFT JOIN categories c ON e.categoryId = c.id
+      WHERE e.amount > ?
+      AND e.user_id = ?
+      AND DATE(e.date) >= DATE('now', '-7 days', 'localtime')
+      ORDER BY e.amount DESC
+      LIMIT 3
+    `, [threshold, user.id]);
+    
+    return anomalousExpenses || [];
   };
 
-  // ========================================
-  // 🆕 NOVAS FUNÇÕES DE DADOS
-  // ========================================
-
-  /**
-   * 🎯 Calcula a projeção de gastos até o fim do mês
-   */
-  const getMonthProjection = async () => {
-    try {
-      const hoje = new Date();
-      const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
-      const diaAtual = hoje.getDate();
-      
-      const monthData = await db.getFirstAsync(`
-        SELECT 
-          COALESCE(SUM(CAST(amount AS REAL)), 0) as total,
-          COUNT(DISTINCT DATE(date)) as dias_com_gastos
-        FROM expenses 
-        WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now', 'localtime')
-      `);
-      
-      if (!monthData || monthData.total === 0) {
-        return {
-          projecao: 0,
-          mediaDiaria: 0,
-          diasRestantes: diasNoMes - diaAtual,
-          percentualMes: (diaAtual / diasNoMes) * 100,
-          totalAtual: 0
-        };
-      }
-      
-      const mediaDiaria = monthData.dias_com_gastos > 0 
-        ? monthData.total / monthData.dias_com_gastos 
-        : monthData.total / diaAtual;
-      
-      const diasRestantes = diasNoMes - diaAtual;
-      const projecao = monthData.total + (mediaDiaria * diasRestantes);
-      
-      return {
-        projecao,
-        mediaDiaria,
-        diasRestantes,
-        percentualMes: (diaAtual / diasNoMes) * 100,
-        totalAtual: monthData.total
-      };
-    } catch (error) {
-      console.error('❌ Erro ao calcular projeção:', error);
-      return { projecao: 0, mediaDiaria: 0, diasRestantes: 0, percentualMes: 0 };
-    }
-  };
-
-  /**
-   * 🏆 Calcula sequência de dias sem gastos
-   */
-  const getDaysWithoutExpenses = async () => {
-    try {
-      const result = await db.getAllAsync(`
-        SELECT DISTINCT DATE(date) as data
-        FROM expenses 
-        WHERE DATE(date) >= DATE('now', '-30 days')
-        ORDER BY date DESC
-      `);
-      
-      if (!result || result.length === 0) {
-        return { 
-          diasConsecutivos: 30, 
-          recorde: 30,
-          ultimoGasto: null 
-        };
-      }
-      
-      const datasComGastos = new Set(result.map(r => r.data));
-      
-      let diasConsecutivos = 0;
-      let recorde = 0;
-      const hoje = new Date();
-      
-      for (let i = 0; i < 30; i++) {
-        const data = new Date(hoje);
-        data.setDate(data.getDate() - i);
-        const dataStr = data.toISOString().split('T')[0];
-        
-        if (!datasComGastos.has(dataStr)) {
-          diasConsecutivos++;
-        } else {
-          recorde = Math.max(recorde, diasConsecutivos);
-          if (i === 0) diasConsecutivos = 0;
-          break;
-        }
-      }
-      
-      return {
-        diasConsecutivos,
-        recorde: Math.max(recorde, diasConsecutivos),
-        ultimoGasto: result[0]?.data || null
-      };
-    } catch (error) {
-      console.error('❌ Erro ao calcular dias sem gastos:', error);
-      return { diasConsecutivos: 0, recorde: 0, ultimoGasto: null };
-    }
-  };
-
-  /**
-   * 🏪 Busca top 3 estabelecimentos com mais gastos
-   */
-  const getTopEstablishments = async () => {
-    try {
-      const result = await db.getAllAsync(`
-        SELECT 
-          est.id,
-          est.name,
-          est.category,
-          COUNT(e.id) as frequencia,
-          SUM(CAST(e.amount AS REAL)) as total,
-          AVG(CAST(e.amount AS REAL)) as ticket_medio,
-          MAX(e.date) as ultima_visita
-        FROM expenses e
-        INNER JOIN establishments est ON e.establishment_id = est.id
-        WHERE strftime('%Y-%m', e.date) = strftime('%Y-%m', 'now', 'localtime')
-        GROUP BY est.id, est.name
-        ORDER BY total DESC
-        LIMIT 3
-      `);
-      
-      if (!result || result.length === 0) {
-        return [];
-      }
-      
-      return result.map((item, index) => ({
-        ...item,
-        posicao: index + 1,
-        emoji: index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'
-      }));
-    } catch (error) {
-      console.error('❌ Erro ao buscar top estabelecimentos:', error);
-      return [];
-    }
-  };
-
-  /**
-   * ⚠️ Detecta gastos atípicos (50% acima da média)
-   */
-  const getAnomalousExpenses = async () => {
-    try {
-      const averages = await db.getAllAsync(`
-        SELECT 
-          categoryId,
-          c.name as category_name,
-          c.icon as category_icon,
-          AVG(CAST(e.amount AS REAL)) as media,
-          MAX(CAST(e.amount AS REAL)) as maximo
-        FROM expenses e
-        LEFT JOIN categories c ON e.categoryId = c.id
-        WHERE DATE(e.date) >= DATE('now', '-30 days')
-        GROUP BY categoryId
-      `);
-      
-      if (!averages || averages.length === 0) return [];
-      
-      const mediasPorCategoria = {};
-      averages.forEach(avg => {
-        mediasPorCategoria[avg.categoryId] = {
-          media: avg.media,
-          nome: avg.category_name,
-          icon: avg.category_icon
-        };
-      });
-      
-      const recentExpenses = await db.getAllAsync(`
-        SELECT 
-          e.id,
-          e.description,
-          e.amount,
-          e.categoryId,
-          e.date
-        FROM expenses e
-        WHERE DATE(e.date) >= DATE('now', '-1 day')
-        ORDER BY e.amount DESC
-      `);
-      
-      const anomalias = [];
-      recentExpenses.forEach(expense => {
-        const catInfo = mediasPorCategoria[expense.categoryId];
-        if (catInfo && expense.amount > catInfo.media * 1.5) {
-          anomalias.push({
-            ...expense,
-            categoria: catInfo.nome,
-            icon: catInfo.icon,
-            media: catInfo.media,
-            percentualAcima: ((expense.amount / catInfo.media - 1) * 100).toFixed(0)
-          });
-        }
-      });
-      
-      return anomalias.slice(0, 3);
-    } catch (error) {
-      console.error('❌ Erro ao detectar anomalias:', error);
-      return [];
-    }
-  };
-
-  /**
-   * 📅 Análise de gastos por dia da semana
-   */
-  const getWeekdayAnalysis = async () => {
-    try {
-      const result = await db.getAllAsync(`
-        SELECT 
-          CAST(strftime('%w', date) AS INTEGER) as dia_semana,
-          COUNT(*) as transacoes,
-          SUM(CAST(amount AS REAL)) as total,
-          AVG(CAST(amount AS REAL)) as media
-        FROM expenses 
-        WHERE DATE(date) >= DATE('now', '-30 days')
-        GROUP BY dia_semana
-        ORDER BY total DESC
-      `);
-      
-      if (!result || result.length === 0) return null;
-      
-      const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-      const dadosFormatados = result.map(r => ({
-        ...r,
-        nome: dias[r.dia_semana],
-        isTop: false
-      }));
-      
-      if (dadosFormatados.length > 0) {
-        dadosFormatados[0].isTop = true;
-      }
-      
-      return dadosFormatados;
-    } catch (error) {
-      console.error('❌ Erro na análise semanal:', error);
-      return null;
-    }
-  };
-
-  // 🆕 FUNÇÃO DE INSIGHTS APRIMORADA
-  const generateEnhancedInsights = (data) => {
+  const generateInsights = useCallback(async () => {
     const insights = [];
-
-    // 🔴 PRIORIDADE 1: Alertas de gastos atípicos
-    if (data.anomalies && data.anomalies.length > 0) {
-      const maiorAnomalia = data.anomalies[0];
+    
+    // Comparação com mês anterior
+    if (lastMonthTotal > 0) {
+      const percentChange = ((monthTotal - lastMonthTotal) / lastMonthTotal) * 100;
       insights.push({
-        icon: '⚠️',
-        type: 'warning',
-        title: 'Gasto Atípico Detectado',
-        message: `"${maiorAnomalia.description}" está ${maiorAnomalia.percentualAcima}% acima da média`,
+        id: 1,
+        type: percentChange > 0 ? 'warning' : 'success',
+        title: 'Comparação Mensal',
+        message: percentChange > 0 
+          ? `Gastos ${percentChange.toFixed(0)}% maiores que mês passado`
+          : `Economia de ${Math.abs(percentChange).toFixed(0)}% vs mês passado`,
         priority: 1
       });
     }
-
-    // 🟡 PRIORIDADE 2: Projeção de fim de mês
-    if (data.projection && data.projection.projecao > 0) {
-      const projecaoFormatada = formatCurrency(data.projection.projecao);
-      const percentualMes = data.projection.percentualMes;
-      
-      if (percentualMes < 50 && data.month.total > data.previousMonth.total * 0.5) {
-        insights.push({
-          icon: '📊',
-          type: 'warning',
-          title: 'Ritmo de Gastos Acelerado',
-          message: `Projeção: ${projecaoFormatada} (${data.projection.diasRestantes} dias restantes)`,
-          priority: 2
-        });
-      } else {
-        insights.push({
-          icon: '📈',
-          type: 'info',
-          title: 'Projeção do Mês',
-          message: `Você deve gastar ${projecaoFormatada} até o fim do mês`,
-          priority: 4
-        });
-      }
-    }
-
-    // 🟢 PRIORIDADE 3: Conquistas de economia
-    if (data.daysWithout && data.daysWithout.diasConsecutivos >= 3) {
+    
+    // Projeção mensal
+    const today = new Date().getDate();
+    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    const projectedMonth = (monthTotal / today) * daysInMonth;
+    
+    if (projectedMonth > monthTotal * 1.2) {
       insights.push({
-        icon: '🏆',
-        type: 'success',
-        title: `${data.daysWithout.diasConsecutivos} Dias Economizando!`,
-        message: data.daysWithout.diasConsecutivos >= 7 
-          ? 'Uma semana inteira! Parabéns!' 
-          : 'Continue assim, você está indo muito bem!',
-        priority: 3
+        id: 2,
+        type: 'warning',
+        title: 'Projeção Mensal',
+        message: `Projeção: ${formatCurrency(projectedMonth)} até fim do mês`,
+        priority: 2
       });
     }
-
-    // 🔵 PRIORIDADE 4: Análise de dia da semana
-    if (data.weekday && data.weekday.length > 0) {
-      const diaMaisCaro = data.weekday[0];
-      const mediaGeral = data.weekday.reduce((sum, d) => sum + d.total, 0) / data.weekday.length;
+    
+    // Categoria dominante
+    if (categoryData.length > 0) {
+      const topCategory = categoryData[0];
+      const percentage = (topCategory.total / monthTotal) * 100;
       
-      if (diaMaisCaro.total > mediaGeral * 1.4) {
+      if (percentage > 40) {
         insights.push({
-          icon: '📅',
+          id: 3,
           type: 'info',
-          title: `${diaMaisCaro.nome} é seu dia mais caro`,
-          message: `Você gasta ${formatPercentage(((diaMaisCaro.total / mediaGeral - 1) * 100))}% mais neste dia`,
-          priority: 5
+          title: 'Categoria Principal',
+          message: `${topCategory.icon} ${topCategory.name} representa ${percentage.toFixed(0)}% dos gastos`,
+          priority: 3
         });
       }
     }
-
-    // 🟣 PRIORIDADE 5: Comparação mensal
-    const monthChange = data.month.total - data.previousMonth.total;
-    const monthChangePercent = data.previousMonth.total > 0 
-      ? ((monthChange / data.previousMonth.total) * 100)
-      : 0;
-
-    if (Math.abs(monthChangePercent) > 20) {
-      if (monthChange > 0) {
-        insights.push({
-          icon: '📈',
-          type: 'warning',
-          title: 'Gastos em Alta',
-          message: `+${formatPercentage(monthChangePercent)}% vs mês passado`,
-          priority: 6
-        });
-      } else {
-        insights.push({
-          icon: '📉',
-          type: 'success',
-          title: 'Excelente Economia!',
-          message: `${formatPercentage(Math.abs(monthChangePercent))}% menos que mês passado`,
-          priority: 6
-        });
-      }
-    }
-
-    return insights.sort((a, b) => a.priority - b.priority).slice(0, 5);
-  };
-
-  // 🎨 FUNÇÕES DE FORMATAÇÃO
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value || 0);
-  };
-
-  const formatPercentage = (value) => {
-    return Math.abs(parseFloat(value)).toFixed(1);
-  };
-
-  const getColorForIndex = (index) => {
-    const colors = ['#10B981', '#3B82F6', '#EF4444', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
-    return colors[index % colors.length];
-  };
-
-  const formatDateRelative = (dateString) => {
-    try {
-      console.log('🔍 Formatando data:', dateString);
+    
+    // Dias sem gastos
+    if (daysWithoutExpenses > 0) {
+      const messages = [
+        'Ótimo controle! Continue assim 💪',
+        'Economia em ação! 🎯',
+        'Carteira agradece! 💰',
+        'Disciplina financeira! 🏆'
+      ];
       
-      if (!dateString) {
-        console.warn('⚠️ Data vazia recebida');
-        return 'Data inválida';
-      }
-
-      let date;
-      
-      if (dateString.includes('T')) {
-        date = new Date(dateString);
-      } else {
-        const parts = dateString.split(' ')[0];
-        date = new Date(parts + 'T00:00:00.000Z');
-      }
-      
-      if (isNaN(date.getTime())) {
-        console.warn('⚠️ Data inválida:', dateString);
-        return 'Data inválida';
-      }
-      
-      const localDate = new Date(date.getTime() + (date.getTimezoneOffset() * 60000));
-      
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      
-      const expenseDate = new Date(localDate);
-      expenseDate.setHours(0, 0, 0, 0);
-      
-      const diffTime = today.getTime() - expenseDate.getTime();
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      
-      console.log('📅 Debug data:', {
-        original: dateString,
-        parsed: date.toISOString(),
-        local: localDate.toISOString(),
-        expense: expenseDate.toISOString(),
-        today: today.toISOString(),
-        diffDays
+      insights.push({
+        id: 4,
+        type: 'success',
+        title: `${daysWithoutExpenses} ${daysWithoutExpenses === 1 ? 'dia' : 'dias'} sem gastos!`,
+        message: messages[Math.floor(Math.random() * messages.length)],
+        priority: 4
       });
-
-      if (diffDays === 0) {
-        return 'Hoje';
-      } else if (diffDays === 1) {
-        return 'Ontem';
-      } else if (diffDays > 1 && diffDays < 7) {
-        return `${diffDays} dias atrás`;
-      } else if (diffDays < 0) {
-        return 'Hoje';
-      } else {
-        return localDate.toLocaleDateString('pt-BR', {
-          day: '2-digit',
-          month: '2-digit',
-          year: localDate.getFullYear() !== today.getFullYear() ? 'numeric' : undefined
+    }
+    
+    // Estabelecimentos frequentes
+    if (topEstablishments.length > 0) {
+      const topPlace = topEstablishments[0];
+      insights.push({
+        id: 5,
+        type: 'info',
+        title: 'Local Mais Visitado',
+        message: `🏪 ${topPlace.name} - ${topPlace.visit_count} visitas`,
+        priority: 5
+      });
+    }
+    
+    // Análise de padrões semanais
+    if (weeklyData.length > 0) {
+      const maxDay = weeklyData.reduce((max, day) => 
+        day.total > max.total ? day : max
+      );
+      
+      if (maxDay.total > 0) {
+        insights.push({
+          id: 6,
+          type: 'info',
+          title: 'Padrão Semanal',
+          message: `📊 ${maxDay.day} é o dia com mais gastos`,
+          priority: 6
         });
       }
+    }
+    
+    return insights.sort((a, b) => a.priority - b.priority);
+  }, [monthTotal, lastMonthTotal, categoryData, daysWithoutExpenses, topEstablishments, weeklyData]);
+
+  const loadAllData = useCallback(async () => {
+    if (!db || !user) return;
+    
+    try {
+      setLoading(true);
+      
+      // Carrega todos os dados em paralelo
+      const [
+        todayData,
+        week,
+        month,
+        lastMonth,
+        year,
+        categories,
+        weekly,
+        recent,
+        monthly,
+        establishments,
+        daysNoExpenses,
+        anomalousExpenses
+      ] = await Promise.all([
+        getTodayData(),
+        getWeekData(),
+        getMonthData(),
+        getLastMonthData(),
+        getYearData(),
+        getCategoryData(),
+        getWeeklyData(),
+        getRecentExpenses(),
+        getMonthlyTrend(),
+        getTopEstablishments(),
+        getDaysWithoutExpenses(),
+        detectAnomalies()
+      ]);
+      
+      setTodayTotal(todayData.total);
+      setTodayCount(todayData.count);
+      setWeekTotal(week);
+      setMonthTotal(month);
+      setLastMonthTotal(lastMonth);
+      setYearTotal(year);
+      setCategoryData(categories);
+      setWeeklyData(weekly);
+      setRecentExpenses(recent);
+      setMonthlyTrend(monthly);
+      setTopEstablishments(establishments);
+      setDaysWithoutExpenses(daysNoExpenses);
+      setAnomalies(anomalousExpenses);
+      
+      // Gera insights
+      const newInsights = await generateInsights();
+      setInsights(newInsights);
       
     } catch (error) {
-      console.error('❌ Erro ao formatar data:', error, dateString);
-      return 'Data inválida';
+      console.error('Erro ao carregar dados:', error);
+      Alert.alert('Erro', 'Não foi possível carregar os dados');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-  };
-
-  const safeNavigate = useCallback((screenName) => {
-    try {
-      if (navigation && isReady) {
-        navigation.navigate(screenName);
-      }
-    } catch (error) {
-      console.error('Erro na navegação:', error);
-    }
-  }, [navigation, isReady]);
+  }, [db, user, generateInsights]);
 
   const onRefresh = useCallback(() => {
-    if (!isRefreshing) {
-      loadDashboardData(true);
-    }
-  }, [isRefreshing, loadDashboardData]);
+    setRefreshing(true);
+    loadAllData();
+  }, [loadAllData]);
 
-  // 📊 DADOS PARA GRÁFICOS
+  // Prepara dados para gráficos
   const pieChartData = useMemo(() => {
-    return dashboardData.categoryDistribution.map(cat => ({
-      name: cat.category,
+    if (categoryData.length === 0) return [];
+    
+    const colors = [
+      '#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', 
+      '#10B981', '#3B82F6', '#EF4444', '#84CC16'
+    ];
+    
+    return categoryData.slice(0, 5).map((cat, index) => ({
+      name: cat.name,
       population: cat.total,
-      color: cat.color,
+      color: colors[index % colors.length],
       legendFontColor: '#374151',
-      legendFontSize: 11
+      legendFontSize: 12
     }));
-  }, [dashboardData.categoryDistribution]);
+  }, [categoryData]);
 
-  const lineChartData = useMemo(() => ({
-    labels: dashboardData.weeklyTrend.map(item => item.label),
-    datasets: [{
-      data: dashboardData.weeklyTrend.map(item => item.total || 0.01),
-      color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
-      strokeWidth: 3
-    }]
-  }), [dashboardData.weeklyTrend]);
+  const lineChartData = useMemo(() => {
+    if (weeklyData.length === 0) return null;
+    
+    return {
+      labels: weeklyData.map(d => d.day),
+      datasets: [{
+        data: weeklyData.map(d => d.total),
+        strokeWidth: 2
+      }]
+    };
+  }, [weeklyData]);
 
   const chartConfig = {
-    backgroundGradientFrom: '#ffffff',
-    backgroundGradientFromOpacity: 0,
-    backgroundGradientTo: '#ffffff',
-    backgroundGradientToOpacity: 0,
-    color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
-    strokeWidth: 2,
-    barPercentage: 0.5,
-    useShadowColorFromDataset: false,
+    backgroundColor: '#FFFFFF',
+    backgroundGradientFrom: '#FFFFFF',
+    backgroundGradientTo: '#FFFFFF',
     decimalPlaces: 0,
-    propsForLabels: { fontSize: 10 }
+    color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
+    style: {
+      borderRadius: 16
+    }
   };
 
-  // 🎭 COMPONENTES EXISTENTES
-  const StatCard = React.memo(({ icon, title, value, subtitle, color, index, onPress }) => {
-    console.log(`🎯 Renderizando StatCard ${index}: ${title}`);
-    
-    return (
-      <View style={[styles.statCard, { borderTopColor: color }]}>
-        <TouchableOpacity 
-          style={styles.statCardTouchable}
-          activeOpacity={0.8}
-          onPress={onPress}
-        >
-          <View style={[styles.statIconContainer, { backgroundColor: color + '15' }]}>
-            <Text style={styles.statIcon}>{icon}</Text>
-          </View>
-          <Text style={styles.statTitle}>{title}</Text>
-          <Text style={[styles.statValue, { color }]}>{value}</Text>
-          {subtitle && <Text style={styles.statSubtitle}>{subtitle}</Text>}
-        </TouchableOpacity>
-      </View>
-    );
-  });
-
-  const QuickAction = React.memo(({ icon, title, subtitle, color, onPress }) => (
-    <TouchableOpacity 
-      style={[styles.quickAction, { borderLeftColor: color }]}
-      activeOpacity={0.8}
-      onPress={onPress}
-    >
-      <View style={[styles.quickActionIcon, { backgroundColor: color + '15' }]}>
-        <Text style={styles.quickActionIconText}>{icon}</Text>
-      </View>
-      <View style={styles.quickActionContent}>
-        <Text style={styles.quickActionTitle}>{title}</Text>
-        <Text style={styles.quickActionSubtitle}>{subtitle}</Text>
-      </View>
-      <Text style={styles.quickActionArrow}>→</Text>
-    </TouchableOpacity>
-  ));
-
-  const RecentExpenseItem = React.memo(({ expense }) => {
-    const formattedDate = formatDateRelative(expense.date);
-    
-    return (
-      <TouchableOpacity style={styles.recentExpenseItem} activeOpacity={0.8}>
-        <View style={styles.expenseIconContainer}>
-          <Text style={styles.expenseIcon}>{expense.icon}</Text>
-        </View>
-        <View style={styles.expenseInfo}>
-          <Text style={styles.expenseDescription} numberOfLines={1}>
-            {expense.description}
-          </Text>
-          <Text style={styles.expenseCategory}>
-            {expense.category} • {formattedDate}
-          </Text>
-        </View>
-        <Text style={styles.expenseAmount}>
-          {formatCurrency(expense.amount)}
-        </Text>
-      </TouchableOpacity>
-    );
-  });
-
-  const InsightCard = React.memo(({ insight }) => (
-    <View style={[
-      styles.insightCard,
-      { 
-        backgroundColor: insight.type === 'success' ? '#f0fdf4' : 
-                        insight.type === 'warning' ? '#fef3c7' : '#eff6ff',
-        borderLeftColor: insight.type === 'success' ? '#10b981' : 
-                        insight.type === 'warning' ? '#f59e0b' : '#3b82f6'
-      }
-    ]}>
-      <View style={styles.insightHeader}>
-        <Text style={styles.insightIcon}>{insight.icon}</Text>
-        <Text style={styles.insightTitle}>{insight.title}</Text>
-      </View>
-      <Text style={styles.insightMessage}>{insight.message}</Text>
-    </View>
-  ));
-
-  // ========================================
-  // 🆕 NOVOS COMPONENTES
-  // ========================================
-
-  /**
-   * 📊 Componente de Projeção Mensal
-   */
-  const MonthProjectionCard = React.memo(({ projection, monthTotal }) => {
-    if (!projection || projection.projecao === 0) return null;
-    
-    const percentualGasto = projection.totalAtual > 0 && projection.projecao > 0
-      ? (projection.totalAtual / projection.projecao) * 100
-      : 0;
-    
-    return (
-      <View style={styles.projectionCard}>
-        <View style={styles.projectionHeader}>
-          <Text style={styles.projectionTitle}>📊 Projeção do Mês</Text>
-          <Text style={styles.projectionDays}>{projection.diasRestantes} dias restantes</Text>
-        </View>
-        
-        <View style={styles.projectionValues}>
-          <View style={styles.projectionCurrent}>
-            <Text style={styles.projectionLabel}>Gasto atual</Text>
-            <Text style={styles.projectionAmount}>{formatCurrency(projection.totalAtual)}</Text>
-          </View>
-          <View style={styles.projectionArrow}>
-            <Text style={styles.projectionArrowText}>→</Text>
-          </View>
-          <View style={styles.projectionFinal}>
-            <Text style={styles.projectionLabel}>Projeção final</Text>
-            <Text style={[styles.projectionAmount, styles.projectionAmountHighlight]}>
-              {formatCurrency(projection.projecao)}
-            </Text>
-          </View>
-        </View>
-        
-        <View style={styles.projectionProgress}>
-          <View style={styles.projectionProgressBar}>
-            <View 
-              style={[
-                styles.projectionProgressFill,
-                { 
-                  width: `${Math.min(percentualGasto, 100)}%`,
-                  backgroundColor: percentualGasto > 80 ? '#EF4444' : '#10B981'
-                }
-              ]} 
-            />
-          </View>
-          <Text style={styles.projectionProgressText}>
-            {percentualGasto.toFixed(0)}% do projetado
-          </Text>
-        </View>
-        
-        <View style={styles.projectionFooter}>
-          <Text style={styles.projectionDaily}>
-            💵 Média diária: {formatCurrency(projection.mediaDiaria)}
-          </Text>
-        </View>
-      </View>
-    );
-  });
-
-  /**
-   * 🏆 Componente de Sequência de Economia
-   */
-  const EconomyStreakCard = React.memo(({ daysData }) => {
-    if (!daysData) return null;
-    
-    const getMessage = () => {
-      const dias = daysData.diasConsecutivos;
-      if (dias === 0) return "Comece hoje sua sequência!";
-      if (dias === 1) return "Primeiro dia economizando!";
-      if (dias < 7) return `${dias} dias seguidos!`;
-      if (dias < 30) return `${dias} dias! Incrível!`;
-      return `${dias} dias! Você é uma lenda!`;
-    };
-    
-    const getEmoji = () => {
-      const dias = daysData.diasConsecutivos;
-      if (dias === 0) return '🎯';
-      if (dias < 3) return '⭐';
-      if (dias < 7) return '🌟';
-      if (dias < 14) return '🏆';
-      if (dias < 30) return '👑';
-      return '🏅';
-    };
-    
-    return (
-      <View style={[
-        styles.economyCard,
-        { backgroundColor: daysData.diasConsecutivos > 0 ? '#F0FDF4' : '#FEF3C7' }
-      ]}>
-        <View style={styles.economyHeader}>
-          <Text style={styles.economyEmoji}>{getEmoji()}</Text>
-          <View style={styles.economyContent}>
-            <Text style={styles.economyTitle}>Sequência de Economia</Text>
-            <Text style={[
-              styles.economyDays,
-              { color: daysData.diasConsecutivos > 0 ? '#166534' : '#92400E' }
-            ]}>
-              {getMessage()}
-            </Text>
-          </View>
-        </View>
-        
-        {daysData.recorde > daysData.diasConsecutivos && (
-          <View style={styles.economyRecord}>
-            <Text style={styles.economyRecordText}>
-              🏅 Recorde: {daysData.recorde} dias
-            </Text>
-          </View>
-        )}
-      </View>
-    );
-  });
-
-  /**
-   * 🏪 Componente de Top Estabelecimentos
-   */
-  const TopEstablishmentsCard = React.memo(({ establishments, onViewAll }) => {
-    if (!establishments || establishments.length === 0) return null;
-    
-    return (
-      <View style={styles.topEstablishmentsCard}>
-        <View style={styles.topEstablishmentsHeader}>
-          <Text style={styles.topEstablishmentsTitle}>🏪 Top Estabelecimentos</Text>
-          <TouchableOpacity onPress={onViewAll}>
-            <Text style={styles.viewAllText}>Ver todos →</Text>
-          </TouchableOpacity>
-        </View>
-        
-        {establishments.map((place, index) => (
-          <View key={place.id} style={styles.establishmentItem}>
-            <Text style={styles.establishmentRank}>{place.emoji}</Text>
-            <View style={styles.establishmentInfo}>
-              <Text style={styles.establishmentName} numberOfLines={1}>
-                {place.name}
-              </Text>
-              <View style={styles.establishmentStats}>
-                <Text style={styles.establishmentVisits}>
-                  {place.frequencia} visita{place.frequencia !== 1 ? 's' : ''}
-                </Text>
-                <Text style={styles.establishmentAverage}>
-                  Ticket: {formatCurrency(place.ticket_medio)}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.establishmentTotal}>
-              {formatCurrency(place.total)}
-            </Text>
-          </View>
-        ))}
-      </View>
-    );
-  });
-
-  /**
-   * ⚠️ Componente de Alertas de Anomalias
-   */
-  const AnomalyAlertCard = React.memo(({ anomaly }) => {
-    if (!anomaly) return null;
-    
-    return (
-      <TouchableOpacity style={styles.anomalyCard} activeOpacity={0.8}>
-        <View style={styles.anomalyIconContainer}>
-          <Text style={styles.anomalyIcon}>⚠️</Text>
-        </View>
-        <View style={styles.anomalyContent}>
-          <Text style={styles.anomalyTitle}>Gasto Atípico Detectado</Text>
-          <Text style={styles.anomalyDescription} numberOfLines={1}>
-            {anomaly.description}
-          </Text>
-          <View style={styles.anomalyDetails}>
-            <Text style={styles.anomalyCategory}>
-              {anomaly.icon} {anomaly.categoria}
-            </Text>
-            <Text style={styles.anomalyPercentage}>
-              +{anomaly.percentualAcima}% da média
-            </Text>
-          </View>
-          <View style={styles.anomalyComparison}>
-            <Text style={styles.anomalyValue}>
-              Valor: {formatCurrency(anomaly.amount)}
-            </Text>
-            <Text style={styles.anomalyAverage}>
-              Média: {formatCurrency(anomaly.media)}
-            </Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  });
-
-  // 🔄 LOADING INICIAL
-  if (isInitialLoading || !isReady) {
+  // Renderização condicional durante carregamento
+  if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
-        <StatusBar barStyle="light-content" backgroundColor="#6366F1" />
         <ActivityIndicator size="large" color="#6366F1" />
         <Text style={styles.loadingText}>Carregando dashboard...</Text>
       </View>
     );
   }
 
-  // ✅ RENDER PRINCIPAL
   return (
-    <View style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={['#6366F1']}
+          tintColor="#6366F1"
+        />
+      }
+      showsVerticalScrollIndicator={false}
+    >
       <StatusBar barStyle="light-content" backgroundColor="#6366F1" />
       
-      <View style={styles.header}>
-        <View style={styles.headerPattern} />
-        <View style={styles.headerContent}>
-          <View style={styles.headerTop}>
-            {/* Botão será reposicionado para baixo da comparação */}
-          </View>
-          
-          <View style={styles.mainSummary}>
-            <Text style={styles.mainSummaryLabel}>Gastos do Mês</Text>
-            <Text style={styles.mainSummaryValue}>
-              {formatCurrency(dashboardData.monthSpending)}
-            </Text>
-            {dashboardData.monthSpending === 2847.90 && (
-              <Text style={styles.demoIndicator}>
-                📊 Dados de demonstração
-              </Text>
-            )}
-            <View style={styles.comparisonContainer}>
-              <View style={styles.comparisonRow}>
-                <Text style={styles.comparisonIcon}>
-                  {dashboardData.monthlyComparison.current > dashboardData.monthlyComparison.previous ? '📈' : '📉'}
-                </Text>
-                <Text style={styles.comparisonText}>vs. mês anterior:</Text>
-              </View>
-              <Text style={[
-                styles.comparisonValue,
-                { 
-                  color: dashboardData.monthlyComparison.current > dashboardData.monthlyComparison.previous 
-                    ? '#fbbf24' : '#34d399' 
-                }
-              ]}>
-                {formatCurrency(dashboardData.monthlyComparison.previous)}
-              </Text>
-              <Text style={[
-                styles.comparisonDifference,
-                { 
-                  color: dashboardData.monthlyComparison.current > dashboardData.monthlyComparison.previous 
-                    ? '#fbbf24' : '#34d399' 
-                }
-              ]}>
-                {dashboardData.monthlyComparison.previous > 0 ? (
-                  dashboardData.monthlyComparison.current > dashboardData.monthlyComparison.previous ? 
-                  `+${formatCurrency(dashboardData.monthlyComparison.current - dashboardData.monthlyComparison.previous)}` :
-                  `${formatCurrency(dashboardData.monthlyComparison.current - dashboardData.monthlyComparison.previous)}`
-                ) : (
-                  'Primeiro mês'
-                )}
-              </Text>
-            </View>
-          </View>
+      <Animated.View style={{
+        opacity: fadeAnim,
+        transform: [{ translateY: slideAnim }]
+      }}>
+        {/* Header com saudação */}
+        <View style={styles.header}>
+          <Text style={styles.greeting}>Olá, {user?.name?.split(' ')[0] || 'Usuário'} 👋</Text>
+          <Text style={styles.date}>{new Date().toLocaleDateString('pt-BR', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          })}</Text>
         </View>
-      </View>
 
-      <ScrollView 
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={onRefresh}
-            colors={['#6366F1']}
-            tintColor="#6366F1"
-          />
-        }
-      >
-        <Animated.View style={{
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }]
-        }}>
-          
-          {/* SEÇÃO DE CARDS EXISTENTES */}
-          <View style={[styles.section, { marginTop: 4, paddingTop: 1, marginBottom: 15 }]}>
-            <Text style={styles.sectionTitle}>📊 Visão Geral</Text>
-            <View style={styles.statsGrid}>
-              <StatCard
-                icon="🌟"
-                title="Hoje"
-                value={formatCurrency(dashboardData.todaySpending)}
-                subtitle={`${dashboardData.todayTransactions} transações`}
-                color="#10B981"
-                index={0}
-              />
-              <StatCard
-                icon="📅"
-                title="Esta Semana"
-                value={formatCurrency(dashboardData.weekSpending)}
-                subtitle={`${dashboardData.weekTransactions} transações`}
-                color="#3B82F6"
-                index={1}
-              />
-              <StatCard
-                icon="📆"
-                title="Este Mês"
-                value={formatCurrency(dashboardData.monthSpending)}
-                subtitle={`${dashboardData.monthTransactions} transações`}
-                color="#8B5CF6"
-                index={2}
-              />
-              <StatCard
-                icon="🗓️"
-                title="Este Ano"
-                value={formatCurrency(dashboardData.yearSpending)}
-                subtitle="Total anual"
-                color="#F59E0B"
-                index={3}
-              />
-            </View>
+        {/* Insights em destaque */}
+        {insights.length > 0 && (
+          <View style={styles.insightsContainer}>
+            <Text style={styles.sectionTitle}>💡 Insights</Text>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.insightsScroll}
+            >
+              {insights.map(insight => (
+                <View 
+                  key={insight.id} 
+                  style={[
+                    styles.insightCard,
+                    insight.type === 'warning' && styles.insightWarning,
+                    insight.type === 'success' && styles.insightSuccess,
+                    insight.type === 'info' && styles.insightInfo
+                  ]}
+                >
+                  <Text style={styles.insightTitle}>{insight.title}</Text>
+                  <Text style={styles.insightMessage}>{insight.message}</Text>
+                </View>
+              ))}
+            </ScrollView>
           </View>
+        )}
 
-          {/* 🆕 SEÇÃO DE PROJEÇÃO E ECONOMIA */}
-          <View style={styles.section}>
-            <View style={styles.projectionEconomyRow}>
-              <MonthProjectionCard 
-                projection={dashboardData.monthProjection}
-                monthTotal={dashboardData.monthSpending}
-              />
-              
-              <EconomyStreakCard 
-                daysData={dashboardData.daysWithoutExpenses}
-              />
-            </View>
+        {/* Cards de resumo */}
+        <View style={styles.summaryCards}>
+          <TouchableOpacity 
+            style={[styles.summaryCard, styles.todayCard]}
+            onPress={() => navigation.navigate('Despesas')}
+          >
+            <Text style={styles.cardLabel}>Hoje</Text>
+            <Text style={styles.cardValue}>{formatCurrency(todayTotal)}</Text>
+            <Text style={styles.cardSubtext}>{todayCount} despesas</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.summaryCard, styles.weekCard]}
+            onPress={() => navigation.navigate('Resumo Diário')}
+          >
+            <Text style={styles.cardLabel}>Semana</Text>
+            <Text style={styles.cardValue}>{formatCurrency(weekTotal)}</Text>
+            <Text style={styles.cardSubtext}>Últimos 7 dias</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.summaryCard, styles.monthCard]}
+            onPress={() => navigation.navigate('Relatório Mensal')}
+          >
+            <Text style={styles.cardLabel}>Mês</Text>
+            <Text style={styles.cardValue}>{formatCurrency(monthTotal)}</Text>
+            <Text style={styles.cardSubtext}>
+              {lastMonthTotal > 0 && (
+                monthTotal > lastMonthTotal ? '📈 ' : '📉 '
+              )}
+              {Math.abs(((monthTotal - lastMonthTotal) / lastMonthTotal) * 100).toFixed(0)}%
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.summaryCard, styles.yearCard]}
+            onPress={() => navigation.navigate('Resumo Anual')}
+          >
+            <Text style={styles.cardLabel}>Ano</Text>
+            <Text style={styles.cardValue}>{formatCurrency(yearTotal)}</Text>
+            <Text style={styles.cardSubtext}>{new Date().getFullYear()}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Gráfico de linha - Evolução semanal */}
+        {lineChartData && (
+          <View style={styles.chartContainer}>
+            <Text style={styles.sectionTitle}>📈 Evolução Semanal</Text>
+            <LineChart
+              data={lineChartData}
+              width={screenWidth - 32}
+              height={200}
+              chartConfig={chartConfig}
+              bezier
+              style={styles.chart}
+              withInnerLines={false}
+              withOuterLines={true}
+              withVerticalLabels={true}
+              withHorizontalLabels={true}
+              formatYLabel={(value) => `R$ ${value}`}
+            />
           </View>
+        )}
 
-          {/* 🆕 ALERTAS DE ANOMALIAS */}
-          {dashboardData.anomalousExpenses && dashboardData.anomalousExpenses.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>⚠️ Alertas</Text>
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                style={styles.anomaliesScroll}
-              >
-                {dashboardData.anomalousExpenses.map((anomaly, index) => (
-                  <AnomalyAlertCard key={anomaly.id} anomaly={anomaly} />
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
-          {/* 🆕 TOP ESTABELECIMENTOS */}
-          {dashboardData.topEstablishments && dashboardData.topEstablishments.length > 0 && (
-            <View style={styles.section}>
-              <TopEstablishmentsCard 
-                establishments={dashboardData.topEstablishments}
-                onViewAll={() => safeNavigate('Estabelecimentos')}
-              />
-            </View>
-          )}
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>⚡ Ações Rápidas</Text>
-            <View style={styles.quickActionsContainer}>
-              <QuickAction
-                icon="➕"
-                title="Nova Despesa"
-                subtitle="Registrar novo gasto"
-                color="#10B981"
-                onPress={() => safeNavigate('Despesas')}
-              />
-              <QuickAction
-                icon="📊"
-                title="Resumo Anual"
-                subtitle="Ver análise completa"
-                color="#3B82F6"
-                onPress={() => safeNavigate('Resumo Anual')}
-              />
-              <QuickAction
-                icon="🏪"
-                title="Estabelecimentos"
-                subtitle="Gerenciar locais"
-                color="#8B5CF6"
-                onPress={() => safeNavigate('Estabelecimentos')}
-              />
-              <QuickAction
-                icon="📂"
-                title="Categorias"
-                subtitle="Organizar despesas"
-                color="#F59E0B"
-                onPress={() => safeNavigate('Categorias')}
-              />
-            </View>
+        {/* Gráfico de pizza - Categorias */}
+        {pieChartData.length > 0 && (
+          <View style={styles.chartContainer}>
+            <Text style={styles.sectionTitle}>🎯 Gastos por Categoria</Text>
+            <PieChart
+              data={pieChartData}
+              width={screenWidth - 32}
+              height={200}
+              chartConfig={chartConfig}
+              accessor="population"
+              backgroundColor="transparent"
+              paddingLeft="15"
+              absolute
+            />
           </View>
+        )}
 
-          {dashboardData.weeklyTrend.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>📈 Tendência da Semana</Text>
-              <View style={styles.chartCard}>
-                <LineChart
-                  data={lineChartData}
-                  width={screenWidth - 40}
-                  height={180}
-                  chartConfig={chartConfig}
-                  bezier
-                  style={styles.chart}
-                  withInnerLines={false}
-                  withDots={true}
-                />
-              </View>
-            </View>
-          )}
-
-          {dashboardData.categoryDistribution.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>🥧 Gastos por Categoria</Text>
-              <View style={styles.chartCard}>
-                <PieChart
-                  data={pieChartData}
-                  width={screenWidth - 40}
-                  height={160}
-                  chartConfig={chartConfig}
-                  accessor="population"
-                  backgroundColor="transparent"
-                  paddingLeft="15"
-                  hasLegend={false}
-                  center={[10, 0]}
-                />
-                <View style={styles.legendContainer}>
-                  {dashboardData.categoryDistribution.slice(0, 4).map((cat, index) => (
-                    <View key={index} style={styles.legendItem}>
-                      <View style={[styles.legendColor, { backgroundColor: cat.color }]} />
-                      <Text style={styles.legendText} numberOfLines={1}>
-                        {cat.category}
-                      </Text>
-                      <Text style={styles.legendValue}>
-                        {formatCurrency(cat.total)}
-                      </Text>
-                    </View>
-                  ))}
+        {/* Top Estabelecimentos */}
+        {topEstablishments.length > 0 && (
+          <View style={styles.establishmentsContainer}>
+            <Text style={styles.sectionTitle}>🏪 Locais Mais Visitados</Text>
+            {topEstablishments.map((place, index) => (
+              <View key={index} style={styles.establishmentCard}>
+                <View style={styles.establishmentRank}>
+                  <Text style={styles.rankNumber}>{index + 1}º</Text>
+                </View>
+                <View style={styles.establishmentInfo}>
+                  <Text style={styles.establishmentName}>{place.name}</Text>
+                  <Text style={styles.establishmentStats}>
+                    {place.visit_count} visitas • {formatCurrency(place.total_spent)}
+                  </Text>
                 </View>
               </View>
-            </View>
-          )}
+            ))}
+          </View>
+        )}
 
-          {/* 🆕 INSIGHTS APRIMORADOS */}
-          {dashboardData.insights.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>💡 Insights Inteligentes</Text>
-              <View style={styles.insightsContainer}>
-                {dashboardData.insights.map((insight, index) => (
-                  <InsightCard key={index} insight={insight} />
-                ))}
-                
-                {/* 🆕 Card de Análise Semanal */}
-                {dashboardData.weekdayAnalysis && dashboardData.weekdayAnalysis.length > 0 && (
-                  <View style={[
-                    styles.insightCard,
-                    { backgroundColor: '#FEF3C7', borderLeftColor: '#F59E0B' }
-                  ]}>
-                    <View style={styles.insightHeader}>
-                      <Text style={styles.insightIcon}>📅</Text>
-                      <Text style={styles.insightTitle}>Padrão Semanal</Text>
-                    </View>
-                    <Text style={styles.insightMessage}>
-                      {dashboardData.weekdayAnalysis[0].nome} é seu dia mais caro 
-                      ({formatCurrency(dashboardData.weekdayAnalysis[0].total)})
-                    </Text>
-                  </View>
-                )}
+        {/* Anomalias detectadas */}
+        {anomalies.length > 0 && (
+          <View style={styles.anomaliesContainer}>
+            <Text style={styles.sectionTitle}>⚠️ Gastos Acima da Média</Text>
+            {anomalies.map((expense, index) => (
+              <View key={index} style={styles.anomalyCard}>
+                <View style={styles.anomalyIcon}>
+                  <Text style={styles.categoryIcon}>{expense.categoryIcon || '💸'}</Text>
+                </View>
+                <View style={styles.anomalyInfo}>
+                  <Text style={styles.anomalyDescription}>{expense.description}</Text>
+                  <Text style={styles.anomalyDetails}>
+                    {formatCurrency(expense.amount)} • {formatDate(expense.date)}
+                  </Text>
+                </View>
               </View>
-            </View>
-          )}
+            ))}
+          </View>
+        )}
 
-          {dashboardData.recentExpenses.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>🕒 Atividade Recente</Text>
-                <TouchableOpacity onPress={() => safeNavigate('Resumo Diário')}>
-                  <Text style={styles.seeAllText}>Ver tudo →</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.recentExpensesContainer}>
-                {dashboardData.recentExpenses.slice(0, 6).map((expense, index) => (
-                  <RecentExpenseItem key={expense.id} expense={expense} />
-                ))}
-              </View>
-            </View>
-          )}
-
-          {dashboardData.monthSpending === 0 && dashboardData.recentExpenses.length === 0 && (
+        {/* Despesas recentes */}
+        <View style={styles.recentContainer}>
+          <View style={styles.recentHeader}>
+            <Text style={styles.sectionTitle}>📋 Últimas Despesas</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Despesas')}>
+              <Text style={styles.seeAllButton}>Ver todas →</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {recentExpenses.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>💰</Text>
-              <Text style={styles.emptyTitle}>Comece a registrar!</Text>
-              <Text style={styles.emptySubtitle}>
-                Adicione suas primeiras despesas para ver estatísticas incríveis aqui.
-              </Text>
+              <Text style={styles.emptyIcon}>📭</Text>
+              <Text style={styles.emptyText}>Nenhuma despesa registrada</Text>
               <TouchableOpacity 
-                style={styles.emptyButton}
-                onPress={() => safeNavigate('Despesas')}
+                style={styles.addButton}
+                onPress={() => navigation.navigate('Despesas')}
               >
-                <Text style={styles.emptyButtonText}>➕ Primeira Despesa</Text>
+                <Text style={styles.addButtonText}>+ Adicionar Despesa</Text>
               </TouchableOpacity>
             </View>
+          ) : (
+            recentExpenses.map((expense, index) => (
+              <TouchableOpacity 
+                key={expense.id} 
+                style={styles.expenseItem}
+                onPress={() => navigation.navigate('Despesas')}
+              >
+                <View style={styles.expenseIcon}>
+                  <Text style={styles.categoryIcon}>
+                    {expense.categoryIcon || '💰'}
+                  </Text>
+                </View>
+                <View style={styles.expenseInfo}>
+                  <Text style={styles.expenseDescription}>{expense.description}</Text>
+                  <Text style={styles.expenseDetails}>
+                    {expense.categoryName || 'Sem categoria'} • {expense.paymentMethodName || 'Dinheiro'}
+                  </Text>
+                </View>
+                <View style={styles.expenseAmount}>
+                  <Text style={styles.expenseValue}>{formatCurrency(expense.amount)}</Text>
+                  <Text style={styles.expenseDate}>{formatDate(expense.date)}</Text>
+                </View>
+              </TouchableOpacity>
+            ))
           )}
+        </View>
 
-          <View style={styles.bottomSpacer} />
-        </Animated.View>
-      </ScrollView>
-    </View>
+        {/* Botão flutuante */}
+        <TouchableOpacity 
+          style={styles.fab}
+          onPress={() => navigation.navigate('Despesas')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.fabText}>+</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#F9FAFB',
-    margin: 0,
-    padding: 0,
-  },
-  
-  header: {
-    backgroundColor: '#6366F1',
-    paddingTop: Platform.OS === 'ios' ? 40 : 18,
-    paddingBottom: 6,
-    overflow: 'hidden',
-    position: 'relative',
-    elevation: 0,
-    shadowOpacity: 0,
-    borderBottomWidth: 0,
-    shadowRadius: 0,
-    shadowOffset: { width: 0, height: 0 },
-    shadowColor: 'transparent',
-    marginBottom: 0,
-    zIndex: 1,
-  },
-  headerPattern: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: '#5A5FC7',
-    opacity: 0.1,
-  },
-  headerContent: { 
-    paddingHorizontal: 20, 
-    position: 'relative', 
-    zIndex: 1,
-    alignItems: 'center',
-    paddingVertical: 2,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    marginBottom: 4,
-    paddingHorizontal: 8,
-  },
-  
-  mainSummary: { 
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-    width: '100%',
-    paddingVertical: 0,
-  },
-  mainSummaryLabel: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: 2,
-    textAlign: 'center',
-    fontWeight: '700',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  mainSummaryValue: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    marginBottom: 3,
-    textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.4)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-    letterSpacing: -0.8,
-    lineHeight: 30,
-  },
-  demoIndicator: {
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.6)',
-    textAlign: 'center',
-    fontStyle: 'italic',
-    marginBottom: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    alignSelf: 'center',
-  },
-  
-  comparisonContainer: { 
-    alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 6,
-    borderRadius: 12,
-    minWidth: 280,
-    maxWidth: '85%',
-    shadowColor: 'rgba(0, 0, 0, 0.1)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    marginTop: 0,
-    alignSelf: 'center',
-  },
-  comparisonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
-  comparisonIcon: {
-    fontSize: 14,
-    marginRight: 6,
-  },
-  comparisonText: { 
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontWeight: '500',
-  },
-  comparisonValue: { 
-    fontSize: 18,
-    fontWeight: '800',
-    textAlign: 'center',
-    marginBottom: 1,
-  },
-  comparisonDifference: {
-    fontSize: 14,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  
-  content: { 
-    flex: 1, 
-    marginTop: 0,
-    minHeight: 1
-  },
-  section: { marginBottom: 10, paddingHorizontal: 16 },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  seeAllText: { fontSize: 14, color: '#6366F1', fontWeight: '600' },
-  viewAllText: { fontSize: 14, color: '#6366F1', fontWeight: '600' },
-  
-  statsGrid: { 
-    flexDirection: 'row', 
-    flexWrap: 'wrap', 
-    gap: 8,
-    justifyContent: 'space-between'
-  },
-  statCard: {
-    width: (screenWidth - 48) / 2,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    borderTopWidth: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 3,
-    opacity: 1,
-    transform: [{ scale: 1 }],
-  },
-  statCardTouchable: {
-    padding: 8,
-    alignItems: 'flex-start',
-  },
-  statIconContainer: {
-    width: 28, height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  statIcon: { fontSize: 14 },
-  statTitle: {
-    fontSize: 11,
-    color: '#6B7280',
-    marginBottom: 4,
-    fontWeight: '500',
-  },
-  statValue: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
-  statSubtitle: { fontSize: 9, color: '#9CA3AF' },
-  
-  quickActionsContainer: { gap: 8 },
-  quickAction: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderLeftWidth: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  quickActionIcon: {
-    width: 40, height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  quickActionIconText: { fontSize: 18 },
-  quickActionContent: { flex: 1 },
-  quickActionTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 2,
-  },
-  quickActionSubtitle: { fontSize: 12, color: '#6B7280' },
-  quickActionArrow: { fontSize: 18, color: '#9CA3AF', fontWeight: '600' },
-  chartCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  chart: { borderRadius: 8 },
-  legendContainer: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  legendColor: { width: 12, height: 12, borderRadius: 6, marginRight: 12 },
-  legendText: {
+  container: {
     flex: 1,
-    fontSize: 14,
-    color: '#374151',
-    fontWeight: '500',
+    backgroundColor: '#F9FAFB',
   },
-  legendValue: { fontSize: 14, color: '#1F2937', fontWeight: '600' },
-  insightsContainer: { gap: 8 },
-  insightCard: { borderRadius: 12, padding: 12, borderLeftWidth: 3 },
-  insightHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  insightIcon: { fontSize: 18, marginRight: 8 },
-  insightTitle: { fontSize: 15, fontWeight: '600', color: '#1F2937' },
-  insightMessage: { fontSize: 13, color: '#4B5563', lineHeight: 18 },
-  recentExpensesContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  recentExpenseItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  expenseIconContainer: {
-    width: 40, height: 40,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  expenseIcon: { fontSize: 18 },
-  expenseInfo: { flex: 1 },
-  expenseDescription: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 2,
-  },
-  expenseCategory: { fontSize: 12, color: '#6B7280' },
-  expenseAmount: { fontSize: 15, fontWeight: '700', color: '#059669' },
-  emptyState: { alignItems: 'center', padding: 32, marginTop: 20 },
-  emptyIcon: { fontSize: 64, marginBottom: 16 },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 24,
-  },
-  emptyButton: {
-    backgroundColor: '#6366F1',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  emptyButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  bottomSpacer: { height: 20 },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#F9FAFB',
-    padding: 20,
   },
-  loadingText: { 
-    marginTop: 16, 
-    fontSize: 16, 
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
     color: '#6B7280',
-    textAlign: 'center'
   },
-
-  // ========================================
-  // 🆕 NOVOS ESTILOS
-  // ========================================
-  
-  // Estilos para Projeção e Economia
-  projectionEconomyRow: {
-    flexDirection: 'column',
-    gap: 12,
-  },
-
-  // 📊 Estilos do Card de Projeção
-  projectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
+  header: {
+    backgroundColor: '#6366F1',
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingBottom: 24,
+    paddingHorizontal: 16,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  projectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  projectionTitle: {
-    fontSize: 18,
+  greeting: {
+    fontSize: 24,
     fontWeight: '700',
-    color: '#1F2937',
+    color: '#FFFFFF',
+    marginBottom: 4,
   },
-  projectionDays: {
-    fontSize: 13,
-    color: '#6B7280',
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+  date: {
+    fontSize: 14,
+    color: '#E0E7FF',
+    textTransform: 'capitalize',
   },
-  projectionValues: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  projectionCurrent: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  projectionArrow: {
+  insightsContainer: {
+    marginTop: 20,
     paddingHorizontal: 16,
   },
-  projectionArrowText: {
-    fontSize: 20,
-    color: '#9CA3AF',
-    fontWeight: '600',
+  insightsScroll: {
+    paddingVertical: 8,
   },
-  projectionFinal: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  projectionLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  projectionAmount: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#374151',
-  },
-  projectionAmountHighlight: {
-    color: '#6366F1',
-    fontSize: 20,
-  },
-  projectionProgress: {
-    marginBottom: 12,
-  },
-  projectionProgressBar: {
-    height: 8,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  projectionProgressFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  projectionProgressText: {
-    fontSize: 12,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  projectionFooter: {
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    paddingTop: 12,
-  },
-  projectionDaily: {
-    fontSize: 14,
-    color: '#374151',
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-
-  // 🏆 Estilos do Card de Economia
-  economyCard: {
-    borderRadius: 12,
-    padding: 20,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: '#D1FAE5',
-  },
-  economyHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  economyEmoji: {
-    fontSize: 32,
-    marginRight: 16,
-  },
-  economyContent: {
-    flex: 1,
-  },
-  economyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 4,
-  },
-  economyDays: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  economyRecord: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#D1FAE5',
-  },
-  economyRecordText: {
-    fontSize: 14,
-    color: '#059669',
-    fontWeight: '500',
-  },
-
-  // 🏪 Estilos do Card de Top Estabelecimentos
-  topEstablishmentsCard: {
+  insightCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    padding: 20,
+    padding: 16,
+    marginRight: 12,
+    minWidth: 250,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     elevation: 3,
   },
-  topEstablishmentsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
+  insightWarning: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#F59E0B',
   },
-  topEstablishmentsTitle: {
-    fontSize: 18,
+  insightSuccess: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#10B981',
+  },
+  insightInfo: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#6366F1',
+  },
+  insightTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  insightMessage: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  summaryCards: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    marginTop: 20,
+    justifyContent: 'space-between',
+  },
+  summaryCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  todayCard: {
+    borderTopWidth: 4,
+    borderTopColor: '#6366F1',
+  },
+  weekCard: {
+    borderTopWidth: 4,
+    borderTopColor: '#8B5CF6',
+  },
+  monthCard: {
+    borderTopWidth: 4,
+    borderTopColor: '#EC4899',
+  },
+  yearCard: {
+    borderTopWidth: 4,
+    borderTopColor: '#10B981',
+  },
+  cardLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  cardValue: {
+    fontSize: 24,
     fontWeight: '700',
     color: '#1F2937',
   },
-  establishmentItem: {
+  cardSubtext: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 4,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 16,
+  },
+  chartContainer: {
+    backgroundColor: '#FFFFFF',
+    margin: 16,
+    padding: 16,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  chart: {
+    marginVertical: 8,
+    borderRadius: 16,
+  },
+  establishmentsContainer: {
+    marginHorizontal: 16,
+    marginTop: 20,
+  },
+  establishmentCard: {
     flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   establishmentRank: {
-    fontSize: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
-    width: 32,
+  },
+  rankNumber: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#6366F1',
   },
   establishmentInfo: {
     flex: 1,
   },
   establishmentName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     color: '#1F2937',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   establishmentStats: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  establishmentVisits: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#6B7280',
   },
-  establishmentAverage: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  establishmentTotal: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#059669',
-  },
-
-  // ⚠️ Estilos do Card de Anomalias
-  anomaliesScroll: {
-    marginTop: 8,
+  anomaliesContainer: {
+    marginHorizontal: 16,
+    marginTop: 20,
   },
   anomalyCard: {
-    backgroundColor: '#FEF2F2',
+    flexDirection: 'row',
+    backgroundColor: '#FEF3C7',
     borderRadius: 12,
     padding: 16,
-    marginRight: 12,
-    width: screenWidth - 64,
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: '#FEE2E2',
+    marginBottom: 8,
+    alignItems: 'center',
+    borderLeftWidth: 4,
+    borderLeftColor: '#F59E0B',
   },
-  anomalyIconContainer: {
-    width: 48,
-    height: 48,
-    backgroundColor: '#FEE2E2',
-    borderRadius: 24,
+  anomalyIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FDE68A',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  anomalyIcon: {
-    fontSize: 24,
-  },
-  anomalyContent: {
+  anomalyInfo: {
     flex: 1,
-  },
-  anomalyTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#B91C1C',
-    marginBottom: 4,
   },
   anomalyDescription: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
+    color: '#92400E',
+    marginBottom: 2,
   },
   anomalyDetails: {
+    fontSize: 14,
+    color: '#B45309',
+  },
+  recentContainer: {
+    marginTop: 20,
+    paddingHorizontal: 16,
+    paddingBottom: 100,
+  },
+  recentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'center',
+    marginBottom: 16,
   },
-  anomalyCategory: {
-    fontSize: 13,
-    color: '#6B7280',
-  },
-  anomalyPercentage: {
-    fontSize: 13,
-    color: '#DC2626',
+  seeAllButton: {
+    fontSize: 14,
+    color: '#6366F1',
     fontWeight: '600',
   },
-  anomalyComparison: {
+  expenseItem: {
     flexDirection: 'row',
-    gap: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  anomalyValue: {
-    fontSize: 14,
-    color: '#374151',
+  expenseIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  categoryIcon: {
+    fontSize: 20,
+  },
+  expenseInfo: {
+    flex: 1,
+  },
+  expenseDescription: {
+    fontSize: 16,
     fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
   },
-  anomalyAverage: {
+  expenseDetails: {
     fontSize: 14,
     color: '#6B7280',
+  },
+  expenseAmount: {
+    alignItems: 'flex-end',
+  },
+  expenseValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
+  expenseDate: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  emptyState: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginBottom: 16,
+  },
+  addButton: {
+    backgroundColor: '#6366F1',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  addButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#6366F1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  fabText: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontWeight: '300',
   },
 });

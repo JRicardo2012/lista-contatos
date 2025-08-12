@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+// components/EstablishmentManager.js - VERSÃO COM USER_ID
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity } from 'react-native';
 import EstablishmentForm from './EstablishmentForm';
 import EstablishmentList from './EstablishmentList';
+import { useAuth } from '../services/AuthContext';
 
 export default function EstablishmentManager() {
+  const { user } = useAuth();
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedEstablishment, setSelectedEstablishment] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -35,8 +38,8 @@ export default function EstablishmentManager() {
         </TouchableOpacity>
       </View>
 
-      {/* Lista simples */}
-      <EstablishmentList key={refreshKey} onEdit={handleEdit} />
+      {/* Lista com user_id */}
+      <EstablishmentList key={refreshKey} onEdit={handleEdit} userId={user?.id} />
 
       {/* Modal simples */}
       <Modal
@@ -59,6 +62,7 @@ export default function EstablishmentManager() {
           <EstablishmentForm 
             establishment={selectedEstablishment} 
             onSaved={handleSaved}
+            userId={user?.id}
           />
         </View>
       </Modal>
