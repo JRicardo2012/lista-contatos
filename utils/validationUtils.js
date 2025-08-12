@@ -9,74 +9,73 @@ import React from 'react';
  * Cada função valida um tipo específico de campo
  */
 export const validators = {
-  
   /**
    * Validador de nome (firstName, lastName)
    * Regras: obrigatório, mínimo 2 chars, máximo 50, só letras
    */
-  name: (value, fieldName = "Nome") => {
+  name: (value, fieldName = 'Nome') => {
     // Verifica se está vazio
     if (!value || !value.trim()) {
       return `${fieldName} é obrigatório`;
     }
-    
+
     // Verifica tamanho mínimo
     if (value.trim().length < 2) {
       return `${fieldName} deve ter pelo menos 2 caracteres`;
     }
-    
+
     // Verifica tamanho máximo
     if (value.trim().length > 50) {
       return `${fieldName} deve ter no máximo 50 caracteres`;
     }
-    
+
     // Verifica se contém apenas letras e espaços
     if (!/^[a-zA-ZÀ-ÿ\s]+$/.test(value.trim())) {
       return `${fieldName} deve conter apenas letras`;
     }
-    
-    return ""; // Sem erro = string vazia
+
+    return ''; // Sem erro = string vazia
   },
 
   /**
    * Validador de email
    * Regras: obrigatório, formato válido, máximo 100 chars
    */
-  email: (value) => {
+  email: value => {
     if (!value || !value.trim()) {
-      return "Email é obrigatório";
+      return 'Email é obrigatório';
     }
-    
+
     // Regex para formato de email válido
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(value.trim())) {
-      return "Email inválido";
+      return 'Email inválido';
     }
-    
+
     if (value.trim().length > 100) {
-      return "Email deve ter no máximo 100 caracteres";
+      return 'Email deve ter no máximo 100 caracteres';
     }
-    
-    return "";
+
+    return '';
   },
 
   /**
    * Validador de telefone
    * Regras: obrigatório, 10-11 dígitos
    */
-  phone: (value) => {
+  phone: value => {
     if (!value || !value.trim()) {
-      return "Telefone é obrigatório";
+      return 'Telefone é obrigatório';
     }
-    
+
     // Remove tudo que não é número
     const cleaned = value.replace(/\D/g, '');
-    
+
     if (cleaned.length < 10 || cleaned.length > 11) {
-      return "Telefone deve ter entre 10 e 11 dígitos";
+      return 'Telefone deve ter entre 10 e 11 dígitos';
     }
-    
-    return "";
+
+    return '';
   },
 
   /**
@@ -85,71 +84,71 @@ export const validators = {
    */
   description: (value, minLength = 3, maxLength = 100) => {
     if (!value || !value.trim()) {
-      return "Descrição é obrigatória";
+      return 'Descrição é obrigatória';
     }
-    
+
     if (value.trim().length < minLength) {
       return `Descrição deve ter pelo menos ${minLength} caracteres`;
     }
-    
+
     if (value.trim().length > maxLength) {
       return `Descrição deve ter no máximo ${maxLength} caracteres`;
     }
-    
-    return "";
+
+    return '';
   },
 
   /**
    * Validador de valor monetário
    * Regras: obrigatório, número válido, maior que zero
    */
-  amount: (value) => {
+  amount: value => {
     if (!value || !value.trim()) {
-      return "Valor é obrigatório";
+      return 'Valor é obrigatório';
     }
-    
+
     // Substitui vírgula por ponto para conversão
     const valorLimpo = value.replace(',', '.');
     const valor = parseFloat(valorLimpo);
-    
+
     if (isNaN(valor)) {
-      return "Valor deve ser um número válido";
+      return 'Valor deve ser um número válido';
     }
-    
+
     if (valor <= 0) {
-      return "Valor deve ser maior que zero";
+      return 'Valor deve ser maior que zero';
     }
-    
+
     if (valor > 999999.99) {
-      return "Valor deve ser menor que R$ 999.999,99";
+      return 'Valor deve ser menor que R$ 999.999,99';
     }
-    
-    return "";
+
+    return '';
   },
 
   /**
    * Validador de nome de categoria
    * Regras: obrigatório, 2-50 chars, letras/números/símbolos básicos
    */
-  categoryName: (value) => {
+  categoryName: value => {
     if (!value || !value.trim()) {
-      return "Nome da categoria é obrigatório";
+      return 'Nome da categoria é obrigatório';
     }
-    
+
     if (value.trim().length < 2) {
-      return "Nome deve ter pelo menos 2 caracteres";
+      return 'Nome deve ter pelo menos 2 caracteres';
     }
-    
+
     if (value.trim().length > 50) {
-      return "Nome deve ter no máximo 50 caracteres";
+      return 'Nome deve ter no máximo 50 caracteres';
     }
-    
+
     // Permite letras, números, espaços, hífens e underscores
     if (!/^[a-zA-ZÀ-ÿ0-9\s\-_]+$/.test(value.trim())) {
-      return "Nome pode conter apenas letras, números, espaços, hífens e underscores";
+      return 'Nome pode conter apenas letras, números, espaços, hífens e underscores';
     }
-    
-    return "";
+
+    return '';
   },
 
   /**
@@ -160,38 +159,38 @@ export const validators = {
     if (value && value.trim().length > maxLength) {
       return `Local deve ter no máximo ${maxLength} caracteres`;
     }
-    return "";
+    return '';
   },
 
   /**
    * Validador genérico obrigatório
    * Regras: campo não pode estar vazio
    */
-  required: (value, fieldName = "Campo") => {
+  required: (value, fieldName = 'Campo') => {
     if (!value || !value.trim()) {
       return `${fieldName} é obrigatório`;
     }
-    return "";
+    return '';
   },
 
   /**
    * Validador de texto genérico
    * Regras: configurável (obrigatório, min/max)
    */
-  text: (value, fieldName = "Campo", minLength = 1, maxLength = 255, required = true) => {
+  text: (value, fieldName = 'Campo', minLength = 1, maxLength = 255, required = true) => {
     if (required && (!value || !value.trim())) {
       return `${fieldName} é obrigatório`;
     }
-    
+
     if (value && value.trim().length < minLength) {
       return `${fieldName} deve ter pelo menos ${minLength} caracteres`;
     }
-    
+
     if (value && value.trim().length > maxLength) {
       return `${fieldName} deve ter no máximo ${maxLength} caracteres`;
     }
-    
-    return "";
+
+    return '';
   }
 };
 
@@ -201,19 +200,19 @@ export const validators = {
  */
 export const validateFields = (fields, rules) => {
   const errors = {};
-  
+
   // Percorre cada campo que tem regras definidas
   Object.keys(rules).forEach(fieldName => {
     const value = fields[fieldName];
     const rule = rules[fieldName];
-    
+
     // Se a regra é uma função simples
     if (typeof rule === 'function') {
       const error = rule(value);
       if (error) {
         errors[fieldName] = error;
       }
-    } 
+    }
     // Se a regra é um array de validadores
     else if (Array.isArray(rule)) {
       for (const validator of rule) {
@@ -225,7 +224,7 @@ export const validateFields = (fields, rules) => {
       }
     }
   });
-  
+
   return errors;
 };
 
@@ -245,7 +244,7 @@ export const useFormValidation = (initialValues = {}, validationRules = {}) => {
    */
   const validateField = (fieldName, value) => {
     const rule = validationRules[fieldName];
-    if (!rule) return "";
+    if (!rule) return '';
 
     if (typeof rule === 'function') {
       return rule(value);
@@ -255,7 +254,7 @@ export const useFormValidation = (initialValues = {}, validationRules = {}) => {
         if (error) return error;
       }
     }
-    return "";
+    return '';
   };
 
   /**
@@ -283,7 +282,7 @@ export const useFormValidation = (initialValues = {}, validationRules = {}) => {
    * Função para marcar campo como "tocado"
    * Executada quando o usuário sai do campo (onBlur)
    */
-  const handleBlur = (fieldName) => {
+  const handleBlur = fieldName => {
     setTouched(prev => ({
       ...prev,
       [fieldName]: true
@@ -331,14 +330,14 @@ export const useFormValidation = (initialValues = {}, validationRules = {}) => {
 
   // Retorna tudo que o componente precisa
   return {
-    values,        // Valores atuais dos campos
-    errors,        // Erros de validação
-    touched,       // Campos que foram "tocados"
-    handleChange,  // Função para atualizar valores
-    handleBlur,    // Função para marcar como "tocado"
-    validateForm,  // Função para validar tudo
-    reset,         // Função para resetar
-    setValues,     // Função para definir valores diretamente
+    values, // Valores atuais dos campos
+    errors, // Erros de validação
+    touched, // Campos que foram "tocados"
+    handleChange, // Função para atualizar valores
+    handleBlur, // Função para marcar como "tocado"
+    validateForm, // Função para validar tudo
+    reset, // Função para resetar
+    setValues, // Função para definir valores diretamente
     isValid: Object.keys(errors).length === 0 // True se não há erros
   };
 };
@@ -351,28 +350,28 @@ export const sanitizers = {
   /**
    * Remove espaços extras e normaliza texto
    */
-  text: (value) => {
+  text: value => {
     return value ? value.trim().replace(/\s+/g, ' ') : '';
   },
 
   /**
    * Formata email (lowercase, sem espaços)
    */
-  email: (value) => {
+  email: value => {
     return value ? value.trim().toLowerCase() : '';
   },
 
   /**
    * Remove caracteres não numéricos do telefone
    */
-  phone: (value) => {
+  phone: value => {
     return value ? value.replace(/\D/g, '') : '';
   },
 
   /**
    * Formata valor monetário (remove caracteres inválidos)
    */
-  currency: (value) => {
+  currency: value => {
     if (!value) return '';
     return value.replace(/[^0-9,]/g, '');
   },
@@ -380,25 +379,28 @@ export const sanitizers = {
   /**
    * Capitaliza primeira letra de cada palavra
    */
-  capitalize: (value) => {
+  capitalize: value => {
     if (!value) return '';
-    return value.trim().toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/\b\w/g, l => l.toUpperCase());
   }
 };
 
 /**
  * EXEMPLOS DE USO:
- * 
+ *
  * 1. Validação simples:
  * const error = validators.email("test@email.com");
  * if (error) console.log(error);
- * 
+ *
  * 2. Validação múltipla:
  * const errors = validateFields(
  *   { name: "João", email: "invalid" },
  *   { name: validators.name, email: validators.email }
  * );
- * 
+ *
  * 3. Hook em componente:
  * const { values, errors, handleChange, validateForm } = useFormValidation(
  *   { name: '', email: '' },

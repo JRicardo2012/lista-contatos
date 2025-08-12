@@ -6,9 +6,9 @@ const Stack = createNativeStackNavigator();
 
 export default function StackRoutes() {
   return (
-    <Stack.Navigator initialRouteName="Home" screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Home" component={DrawerNavigator} />
-      <Stack.Screen name="Nova Despesa" component={ExpenseManager} />
+    <Stack.Navigator initialRouteName='Home' screenOptions={{ headerShown: false }}>
+      <Stack.Screen name='Home' component={DrawerNavigator} />
+      <Stack.Screen name='Nova Despesa' component={ExpenseManager} />
     </Stack.Navigator>
   );
 }

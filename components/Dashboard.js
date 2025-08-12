@@ -1,6 +1,4 @@
-// components/Dashboard.js  
-// SUBSTITUIR O ARQUIVO EXISTENTE POR ESTE CÓDIGO COMPLETO
-
+// components/Dashboard.js - DESIGN NUBANK
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -19,7 +17,17 @@ import {
 import { useSQLiteContext } from 'expo-sqlite';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { LineChart, PieChart } from 'react-native-chart-kit';
-import { useAuth } from '../services/AuthContext'; // NOVO IMPORT
+import { useAuth } from '../services/AuthContext';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
+import {
+  NUBANK_COLORS,
+  NUBANK_SPACING,
+  NUBANK_FONT_SIZES,
+  NUBANK_BORDER_RADIUS,
+  NUBANK_SHADOWS,
+  NUBANK_FONT_WEIGHTS
+} from '../constants/nubank-theme';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -28,13 +36,14 @@ global.expenseListeners = global.expenseListeners || [];
 
 export default function Dashboard({ navigation }) {
   const db = useSQLiteContext();
-  const { user } = useAuth(); // NOVO: pega o usuário logado
-  
+  const { user } = useAuth();
+
   // Estados principais
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState('month');
-  
+  const [showBalance, setShowBalance] = useState(true);
+
   // Dados de despesas
   const [todayTotal, setTodayTotal] = useState(0);
   const [todayCount, setTodayCount] = useState(0);
@@ -47,15 +56,16 @@ export default function Dashboard({ navigation }) {
   const [recentExpenses, setRecentExpenses] = useState([]);
   const [monthlyTrend, setMonthlyTrend] = useState([]);
   const [topEstablishments, setTopEstablishments] = useState([]);
-  
+
   // Estados de insights
   const [insights, setInsights] = useState([]);
   const [daysWithoutExpenses, setDaysWithoutExpenses] = useState(0);
   const [anomalies, setAnomalies] = useState([]);
-  
+
   // Animações
   const fadeAnim = useState(new Animated.Value(0))[0];
   const slideAnim = useState(new Animated.Value(50))[0];
+  const scaleAnim = useState(new Animated.Value(0.8))[0];
 
   // Registra listener para atualizações automáticas
   useEffect(() => {
@@ -78,84 +88,106 @@ export default function Dashboard({ navigation }) {
   useEffect(() => {
     loadAllData();
     startAnimations();
-  }, [db, user]); // ATUALIZADO: recarrega quando usuário muda
+  }, [db, user]);
 
   const startAnimations = () => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 800,
-        useNativeDriver: true,
+        useNativeDriver: true
       }),
       Animated.spring(slideAnim, {
         toValue: 0,
         tension: 20,
         friction: 7,
-        useNativeDriver: true,
+        useNativeDriver: true
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        tension: 20,
+        friction: 7,
+        useNativeDriver: true
       })
     ]).start();
   };
 
-  // ATUALIZADO: Todas as queries agora filtram por user_id
+  // Funções de dados (mantidas as mesmas)
   const getTodayData = async () => {
-    const result = await db.getFirstAsync(`
+    const result = await db.getFirstAsync(
+      `
       SELECT 
         COALESCE(SUM(CAST(amount AS REAL)), 0) as total,
         COUNT(*) as count
       FROM expenses 
       WHERE DATE(date) = DATE('now', 'localtime')
       AND user_id = ?
-    `, [user.id]);
-    
+    `,
+      [user.id]
+    );
+
     return result || { total: 0, count: 0 };
   };
 
   const getWeekData = async () => {
-    const result = await db.getFirstAsync(`
+    const result = await db.getFirstAsync(
+      `
       SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total
       FROM expenses 
       WHERE DATE(date) >= DATE('now', '-7 days', 'localtime')
       AND user_id = ?
-    `, [user.id]);
-    
+    `,
+      [user.id]
+    );
+
     return result?.total || 0;
   };
 
   const getMonthData = async () => {
-    const result = await db.getFirstAsync(`
+    const result = await db.getFirstAsync(
+      `
       SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total
       FROM expenses 
       WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now', 'localtime')
       AND user_id = ?
-    `, [user.id]);
-    
+    `,
+      [user.id]
+    );
+
     return result?.total || 0;
   };
 
   const getLastMonthData = async () => {
-    const result = await db.getFirstAsync(`
+    const result = await db.getFirstAsync(
+      `
       SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total
       FROM expenses 
       WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now', '-1 month', 'localtime')
       AND user_id = ?
-    `, [user.id]);
-    
+    `,
+      [user.id]
+    );
+
     return result?.total || 0;
   };
 
   const getYearData = async () => {
-    const result = await db.getFirstAsync(`
+    const result = await db.getFirstAsync(
+      `
       SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total
       FROM expenses 
       WHERE strftime('%Y', date) = strftime('%Y', 'now', 'localtime')
       AND user_id = ?
-    `, [user.id]);
-    
+    `,
+      [user.id]
+    );
+
     return result?.total || 0;
   };
 
   const getCategoryData = async () => {
-    const results = await db.getAllAsync(`
+    const results = await db.getAllAsync(
+      `
       SELECT 
         c.name,
         c.icon,
@@ -168,13 +200,16 @@ export default function Dashboard({ navigation }) {
       GROUP BY c.id, c.name, c.icon
       HAVING total > 0
       ORDER BY total DESC
-    `, [user.id]);
-    
+    `,
+      [user.id]
+    );
+
     return results || [];
   };
 
   const getWeeklyData = async () => {
-    const results = await db.getAllAsync(`
+    const results = await db.getAllAsync(
+      `
       SELECT 
         DATE(date) as day,
         strftime('%w', date) as weekday,
@@ -185,16 +220,18 @@ export default function Dashboard({ navigation }) {
       AND user_id = ?
       GROUP BY DATE(date)
       ORDER BY DATE(date) ASC
-    `, [user.id]);
-    
+    `,
+      [user.id]
+    );
+
     const daysOfWeek = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     const last7Days = [];
-    
+
     for (let i = 6; i >= 0; i--) {
       const date = new Date();
       date.setDate(date.getDate() - i);
       const dateStr = date.toISOString().split('T')[0];
-      
+
       const dayData = results.find(r => r.day === dateStr);
       last7Days.push({
         day: daysOfWeek[date.getDay()],
@@ -203,12 +240,13 @@ export default function Dashboard({ navigation }) {
         count: dayData ? dayData.count : 0
       });
     }
-    
+
     return last7Days;
   };
 
   const getRecentExpenses = async () => {
-    const results = await db.getAllAsync(`
+    const results = await db.getAllAsync(
+      `
       SELECT 
         e.*,
         c.name as categoryName,
@@ -223,13 +261,16 @@ export default function Dashboard({ navigation }) {
       WHERE e.user_id = ?
       ORDER BY e.date DESC, e.id DESC
       LIMIT 5
-    `, [user.id]);
-    
+    `,
+      [user.id]
+    );
+
     return results || [];
   };
 
   const getMonthlyTrend = async () => {
-    const results = await db.getAllAsync(`
+    const results = await db.getAllAsync(
+      `
       SELECT 
         strftime('%Y-%m', date) as month,
         SUM(CAST(amount AS REAL)) as total
@@ -238,10 +279,25 @@ export default function Dashboard({ navigation }) {
       AND user_id = ?
       GROUP BY strftime('%Y-%m', date)
       ORDER BY month ASC
-    `, [user.id]);
-    
-    const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-    
+    `,
+      [user.id]
+    );
+
+    const months = [
+      'Jan',
+      'Fev',
+      'Mar',
+      'Abr',
+      'Mai',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Set',
+      'Out',
+      'Nov',
+      'Dez'
+    ];
+
     return results.map(r => {
       const [year, month] = r.month.split('-');
       return {
@@ -252,7 +308,8 @@ export default function Dashboard({ navigation }) {
   };
 
   const getTopEstablishments = async () => {
-    const results = await db.getAllAsync(`
+    const results = await db.getAllAsync(
+      `
       SELECT 
         est.name,
         COUNT(e.id) as visit_count,
@@ -264,159 +321,19 @@ export default function Dashboard({ navigation }) {
       GROUP BY est.id, est.name
       ORDER BY visit_count DESC, total_spent DESC
       LIMIT 3
-    `, [user.id]);
-    
+    `,
+      [user.id]
+    );
+
     return results || [];
   };
 
-  const getDaysWithoutExpenses = async () => {
-    const result = await db.getFirstAsync(`
-      SELECT 
-        julianday('now', 'localtime') - julianday(MAX(date)) as days
-      FROM expenses
-      WHERE user_id = ?
-    `, [user.id]);
-    
-    return Math.floor(result?.days || 0);
-  };
-
-  const detectAnomalies = async () => {
-    const avgResult = await db.getFirstAsync(`
-      SELECT AVG(daily_total) as avg_daily
-      FROM (
-        SELECT SUM(CAST(amount AS REAL)) as daily_total
-        FROM expenses
-        WHERE DATE(date) >= DATE('now', '-30 days', 'localtime')
-        AND user_id = ?
-        GROUP BY DATE(date)
-      )
-    `, [user.id]);
-    
-    const avgDaily = avgResult?.avg_daily || 0;
-    const threshold = avgDaily * 1.5;
-    
-    const anomalousExpenses = await db.getAllAsync(`
-      SELECT 
-        e.*,
-        c.name as categoryName,
-        c.icon as categoryIcon
-      FROM expenses e
-      LEFT JOIN categories c ON e.categoryId = c.id
-      WHERE e.amount > ?
-      AND e.user_id = ?
-      AND DATE(e.date) >= DATE('now', '-7 days', 'localtime')
-      ORDER BY e.amount DESC
-      LIMIT 3
-    `, [threshold, user.id]);
-    
-    return anomalousExpenses || [];
-  };
-
-  const generateInsights = useCallback(async () => {
-    const insights = [];
-    
-    // Comparação com mês anterior
-    if (lastMonthTotal > 0) {
-      const percentChange = ((monthTotal - lastMonthTotal) / lastMonthTotal) * 100;
-      insights.push({
-        id: 1,
-        type: percentChange > 0 ? 'warning' : 'success',
-        title: 'Comparação Mensal',
-        message: percentChange > 0 
-          ? `Gastos ${percentChange.toFixed(0)}% maiores que mês passado`
-          : `Economia de ${Math.abs(percentChange).toFixed(0)}% vs mês passado`,
-        priority: 1
-      });
-    }
-    
-    // Projeção mensal
-    const today = new Date().getDate();
-    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-    const projectedMonth = (monthTotal / today) * daysInMonth;
-    
-    if (projectedMonth > monthTotal * 1.2) {
-      insights.push({
-        id: 2,
-        type: 'warning',
-        title: 'Projeção Mensal',
-        message: `Projeção: ${formatCurrency(projectedMonth)} até fim do mês`,
-        priority: 2
-      });
-    }
-    
-    // Categoria dominante
-    if (categoryData.length > 0) {
-      const topCategory = categoryData[0];
-      const percentage = (topCategory.total / monthTotal) * 100;
-      
-      if (percentage > 40) {
-        insights.push({
-          id: 3,
-          type: 'info',
-          title: 'Categoria Principal',
-          message: `${topCategory.icon} ${topCategory.name} representa ${percentage.toFixed(0)}% dos gastos`,
-          priority: 3
-        });
-      }
-    }
-    
-    // Dias sem gastos
-    if (daysWithoutExpenses > 0) {
-      const messages = [
-        'Ótimo controle! Continue assim 💪',
-        'Economia em ação! 🎯',
-        'Carteira agradece! 💰',
-        'Disciplina financeira! 🏆'
-      ];
-      
-      insights.push({
-        id: 4,
-        type: 'success',
-        title: `${daysWithoutExpenses} ${daysWithoutExpenses === 1 ? 'dia' : 'dias'} sem gastos!`,
-        message: messages[Math.floor(Math.random() * messages.length)],
-        priority: 4
-      });
-    }
-    
-    // Estabelecimentos frequentes
-    if (topEstablishments.length > 0) {
-      const topPlace = topEstablishments[0];
-      insights.push({
-        id: 5,
-        type: 'info',
-        title: 'Local Mais Visitado',
-        message: `🏪 ${topPlace.name} - ${topPlace.visit_count} visitas`,
-        priority: 5
-      });
-    }
-    
-    // Análise de padrões semanais
-    if (weeklyData.length > 0) {
-      const maxDay = weeklyData.reduce((max, day) => 
-        day.total > max.total ? day : max
-      );
-      
-      if (maxDay.total > 0) {
-        insights.push({
-          id: 6,
-          type: 'info',
-          title: 'Padrão Semanal',
-          message: `📊 ${maxDay.day} é o dia com mais gastos`,
-          priority: 6
-        });
-      }
-    }
-    
-    return insights.sort((a, b) => a.priority - b.priority);
-  }, [monthTotal, lastMonthTotal, categoryData, daysWithoutExpenses, topEstablishments, weeklyData]);
-
   const loadAllData = useCallback(async () => {
     if (!db || !user) return;
-    
+
     try {
       setLoading(true);
-      
-      // Carrega todos os dados em paralelo
+
       const [
         todayData,
         week,
@@ -427,9 +344,7 @@ export default function Dashboard({ navigation }) {
         weekly,
         recent,
         monthly,
-        establishments,
-        daysNoExpenses,
-        anomalousExpenses
+        establishments
       ] = await Promise.all([
         getTodayData(),
         getWeekData(),
@@ -440,11 +355,9 @@ export default function Dashboard({ navigation }) {
         getWeeklyData(),
         getRecentExpenses(),
         getMonthlyTrend(),
-        getTopEstablishments(),
-        getDaysWithoutExpenses(),
-        detectAnomalies()
+        getTopEstablishments()
       ]);
-      
+
       setTodayTotal(todayData.total);
       setTodayCount(todayData.count);
       setWeekTotal(week);
@@ -456,13 +369,6 @@ export default function Dashboard({ navigation }) {
       setRecentExpenses(recent);
       setMonthlyTrend(monthly);
       setTopEstablishments(establishments);
-      setDaysWithoutExpenses(daysNoExpenses);
-      setAnomalies(anomalousExpenses);
-      
-      // Gera insights
-      const newInsights = await generateInsights();
-      setInsights(newInsights);
-      
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       Alert.alert('Erro', 'Não foi possível carregar os dados');
@@ -470,7 +376,7 @@ export default function Dashboard({ navigation }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [db, user, generateInsights]);
+  }, [db, user]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -480,41 +386,48 @@ export default function Dashboard({ navigation }) {
   // Prepara dados para gráficos
   const pieChartData = useMemo(() => {
     if (categoryData.length === 0) return [];
-    
+
     const colors = [
-      '#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', 
-      '#10B981', '#3B82F6', '#EF4444', '#84CC16'
+      NUBANK_COLORS.PRIMARY,
+      NUBANK_COLORS.PRIMARY_DARK,
+      NUBANK_COLORS.PRIMARY_LIGHT,
+      '#A640FF',
+      '#9B30FF',
+      '#8820FF'
     ];
-    
+
     return categoryData.slice(0, 5).map((cat, index) => ({
       name: cat.name,
       population: cat.total,
       color: colors[index % colors.length],
-      legendFontColor: '#374151',
+      legendFontColor: NUBANK_COLORS.TEXT_PRIMARY,
       legendFontSize: 12
     }));
   }, [categoryData]);
 
   const lineChartData = useMemo(() => {
     if (weeklyData.length === 0) return null;
-    
+
     return {
       labels: weeklyData.map(d => d.day),
-      datasets: [{
-        data: weeklyData.map(d => d.total),
-        strokeWidth: 2
-      }]
+      datasets: [
+        {
+          data: weeklyData.map(d => d.total),
+          strokeWidth: 3
+        }
+      ]
     };
   }, [weeklyData]);
 
   const chartConfig = {
-    backgroundColor: '#FFFFFF',
-    backgroundGradientFrom: '#FFFFFF',
-    backgroundGradientTo: '#FFFFFF',
+    backgroundColor: NUBANK_COLORS.BACKGROUND,
+    backgroundGradientFrom: NUBANK_COLORS.BACKGROUND,
+    backgroundGradientTo: NUBANK_COLORS.BACKGROUND,
     decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
+    color: (opacity = 1) => `rgba(130, 10, 209, ${opacity})`,
+    labelColor: (opacity = 1) => `rgba(17, 17, 17, ${opacity})`,
     style: {
-      borderRadius: 16
+      borderRadius: NUBANK_BORDER_RADIUS.LG
     }
   };
 
@@ -522,599 +435,595 @@ export default function Dashboard({ navigation }) {
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6366F1" />
+        <ActivityIndicator size='large' color={NUBANK_COLORS.PRIMARY} />
         <Text style={styles.loadingText}>Carregando dashboard...</Text>
       </View>
     );
   }
 
+  // Renderização do valor com máscara
+  const renderMaskedValue = value => {
+    if (showBalance) {
+      return formatCurrency(value);
+    }
+    return '••••••';
+  };
+
   return (
-    <ScrollView 
-      style={styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          colors={['#6366F1']}
-          tintColor="#6366F1"
-        />
-      }
-      showsVerticalScrollIndicator={false}
-    >
-      <StatusBar barStyle="light-content" backgroundColor="#6366F1" />
-      
-      <Animated.View style={{
-        opacity: fadeAnim,
-        transform: [{ translateY: slideAnim }]
-      }}>
-        {/* Header com saudação */}
-        <View style={styles.header}>
-          <Text style={styles.greeting}>Olá, {user?.name?.split(' ')[0] || 'Usuário'} 👋</Text>
-          <Text style={styles.date}>{new Date().toLocaleDateString('pt-BR', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          })}</Text>
+    <View style={styles.container}>
+      <StatusBar barStyle='light-content' backgroundColor={NUBANK_COLORS.PRIMARY} />
+
+      {/* Header Nubank */}
+      <LinearGradient
+        colors={[NUBANK_COLORS.PRIMARY, NUBANK_COLORS.PRIMARY_DARK]}
+        style={styles.header}
+      >
+        <View style={styles.headerTop}>
+          <TouchableOpacity style={styles.menuButton} onPress={() => navigation.openDrawer()}>
+            <Ionicons name='menu' size={24} color={NUBANK_COLORS.TEXT_WHITE} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.eyeButton} onPress={() => setShowBalance(!showBalance)}>
+            <Ionicons
+              name={showBalance ? 'eye-outline' : 'eye-off-outline'}
+              size={24}
+              color={NUBANK_COLORS.TEXT_WHITE}
+            />
+          </TouchableOpacity>
         </View>
 
-        {/* Insights em destaque */}
-        {insights.length > 0 && (
-          <View style={styles.insightsContainer}>
-            <Text style={styles.sectionTitle}>💡 Insights</Text>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.insightsScroll}
+        <View style={styles.headerContent}>
+          <Text style={styles.greeting}>Olá, {user?.name?.split(' ')[0] || 'Usuário'}</Text>
+
+          <View style={styles.balanceContainer}>
+            <Text style={styles.balanceLabel}>Gastos do mês</Text>
+            <Text style={styles.balanceValue}>{renderMaskedValue(monthTotal)}</Text>
+          </View>
+        </View>
+      </LinearGradient>
+
+      <ScrollView
+        style={styles.scrollView}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[NUBANK_COLORS.PRIMARY]}
+            tintColor={NUBANK_COLORS.PRIMARY}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View
+          style={{
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }]
+          }}
+        >
+          {/* Quick Actions - Estilo Nubank */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickActions}>
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => navigation.navigate('Despesas')}
             >
-              {insights.map(insight => (
-                <View 
-                  key={insight.id} 
-                  style={[
-                    styles.insightCard,
-                    insight.type === 'warning' && styles.insightWarning,
-                    insight.type === 'success' && styles.insightSuccess,
-                    insight.type === 'info' && styles.insightInfo
-                  ]}
-                >
-                  <Text style={styles.insightTitle}>{insight.title}</Text>
-                  <Text style={styles.insightMessage}>{insight.message}</Text>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Cards de resumo */}
-        <View style={styles.summaryCards}>
-          <TouchableOpacity 
-            style={[styles.summaryCard, styles.todayCard]}
-            onPress={() => navigation.navigate('Despesas')}
-          >
-            <Text style={styles.cardLabel}>Hoje</Text>
-            <Text style={styles.cardValue}>{formatCurrency(todayTotal)}</Text>
-            <Text style={styles.cardSubtext}>{todayCount} despesas</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.summaryCard, styles.weekCard]}
-            onPress={() => navigation.navigate('Resumo Diário')}
-          >
-            <Text style={styles.cardLabel}>Semana</Text>
-            <Text style={styles.cardValue}>{formatCurrency(weekTotal)}</Text>
-            <Text style={styles.cardSubtext}>Últimos 7 dias</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.summaryCard, styles.monthCard]}
-            onPress={() => navigation.navigate('Relatório Mensal')}
-          >
-            <Text style={styles.cardLabel}>Mês</Text>
-            <Text style={styles.cardValue}>{formatCurrency(monthTotal)}</Text>
-            <Text style={styles.cardSubtext}>
-              {lastMonthTotal > 0 && (
-                monthTotal > lastMonthTotal ? '📈 ' : '📉 '
-              )}
-              {Math.abs(((monthTotal - lastMonthTotal) / lastMonthTotal) * 100).toFixed(0)}%
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.summaryCard, styles.yearCard]}
-            onPress={() => navigation.navigate('Resumo Anual')}
-          >
-            <Text style={styles.cardLabel}>Ano</Text>
-            <Text style={styles.cardValue}>{formatCurrency(yearTotal)}</Text>
-            <Text style={styles.cardSubtext}>{new Date().getFullYear()}</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Gráfico de linha - Evolução semanal */}
-        {lineChartData && (
-          <View style={styles.chartContainer}>
-            <Text style={styles.sectionTitle}>📈 Evolução Semanal</Text>
-            <LineChart
-              data={lineChartData}
-              width={screenWidth - 32}
-              height={200}
-              chartConfig={chartConfig}
-              bezier
-              style={styles.chart}
-              withInnerLines={false}
-              withOuterLines={true}
-              withVerticalLabels={true}
-              withHorizontalLabels={true}
-              formatYLabel={(value) => `R$ ${value}`}
-            />
-          </View>
-        )}
-
-        {/* Gráfico de pizza - Categorias */}
-        {pieChartData.length > 0 && (
-          <View style={styles.chartContainer}>
-            <Text style={styles.sectionTitle}>🎯 Gastos por Categoria</Text>
-            <PieChart
-              data={pieChartData}
-              width={screenWidth - 32}
-              height={200}
-              chartConfig={chartConfig}
-              accessor="population"
-              backgroundColor="transparent"
-              paddingLeft="15"
-              absolute
-            />
-          </View>
-        )}
-
-        {/* Top Estabelecimentos */}
-        {topEstablishments.length > 0 && (
-          <View style={styles.establishmentsContainer}>
-            <Text style={styles.sectionTitle}>🏪 Locais Mais Visitados</Text>
-            {topEstablishments.map((place, index) => (
-              <View key={index} style={styles.establishmentCard}>
-                <View style={styles.establishmentRank}>
-                  <Text style={styles.rankNumber}>{index + 1}º</Text>
-                </View>
-                <View style={styles.establishmentInfo}>
-                  <Text style={styles.establishmentName}>{place.name}</Text>
-                  <Text style={styles.establishmentStats}>
-                    {place.visit_count} visitas • {formatCurrency(place.total_spent)}
-                  </Text>
-                </View>
+              <View style={styles.quickActionIcon}>
+                <MaterialCommunityIcons name='plus' size={24} color={NUBANK_COLORS.PRIMARY} />
               </View>
-            ))}
-          </View>
-        )}
-
-        {/* Anomalias detectadas */}
-        {anomalies.length > 0 && (
-          <View style={styles.anomaliesContainer}>
-            <Text style={styles.sectionTitle}>⚠️ Gastos Acima da Média</Text>
-            {anomalies.map((expense, index) => (
-              <View key={index} style={styles.anomalyCard}>
-                <View style={styles.anomalyIcon}>
-                  <Text style={styles.categoryIcon}>{expense.categoryIcon || '💸'}</Text>
-                </View>
-                <View style={styles.anomalyInfo}>
-                  <Text style={styles.anomalyDescription}>{expense.description}</Text>
-                  <Text style={styles.anomalyDetails}>
-                    {formatCurrency(expense.amount)} • {formatDate(expense.date)}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* Despesas recentes */}
-        <View style={styles.recentContainer}>
-          <View style={styles.recentHeader}>
-            <Text style={styles.sectionTitle}>📋 Últimas Despesas</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Despesas')}>
-              <Text style={styles.seeAllButton}>Ver todas →</Text>
+              <Text style={styles.quickActionText}>Adicionar</Text>
             </TouchableOpacity>
-          </View>
-          
-          {recentExpenses.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>📭</Text>
-              <Text style={styles.emptyText}>Nenhuma despesa registrada</Text>
-              <TouchableOpacity 
-                style={styles.addButton}
-                onPress={() => navigation.navigate('Despesas')}
-              >
-                <Text style={styles.addButtonText}>+ Adicionar Despesa</Text>
+
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => navigation.navigate('Resumo Mensal')}
+            >
+              <View style={styles.quickActionIcon}>
+                <MaterialCommunityIcons name='chart-line' size={24} color={NUBANK_COLORS.PRIMARY} />
+              </View>
+              <Text style={styles.quickActionText}>Relatórios</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => navigation.navigate('Categorias')}
+            >
+              <View style={styles.quickActionIcon}>
+                <MaterialCommunityIcons
+                  name='tag-outline'
+                  size={24}
+                  color={NUBANK_COLORS.PRIMARY}
+                />
+              </View>
+              <Text style={styles.quickActionText}>Categorias</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => navigation.navigate('Estabelecimentos')}
+            >
+              <View style={styles.quickActionIcon}>
+                <MaterialCommunityIcons
+                  name='store-outline'
+                  size={24}
+                  color={NUBANK_COLORS.PRIMARY}
+                />
+              </View>
+              <Text style={styles.quickActionText}>Locais</Text>
+            </TouchableOpacity>
+          </ScrollView>
+
+          {/* Cards de resumo - Estilo Nubank */}
+          <View style={styles.summarySection}>
+            <Text style={styles.sectionTitle}>Resumo</Text>
+
+            <View style={styles.summaryCards}>
+              <TouchableOpacity style={styles.summaryCard}>
+                <View style={styles.summaryCardContent}>
+                  <Text style={styles.summaryCardLabel}>Hoje</Text>
+                  <Text style={styles.summaryCardValue}>{renderMaskedValue(todayTotal)}</Text>
+                  <Text style={styles.summaryCardSubtext}>
+                    {todayCount} {todayCount === 1 ? 'despesa' : 'despesas'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.summaryCard}>
+                <View style={styles.summaryCardContent}>
+                  <Text style={styles.summaryCardLabel}>Semana</Text>
+                  <Text style={styles.summaryCardValue}>{renderMaskedValue(weekTotal)}</Text>
+                  <Text style={styles.summaryCardSubtext}>Últimos 7 dias</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.summaryCard}>
+                <View style={styles.summaryCardContent}>
+                  <Text style={styles.summaryCardLabel}>Mês anterior</Text>
+                  <Text style={styles.summaryCardValue}>{renderMaskedValue(lastMonthTotal)}</Text>
+                  <Text style={styles.summaryCardSubtext}>
+                    {lastMonthTotal > monthTotal ? '📈' : '📉'}{' '}
+                    {Math.abs(
+                      ((monthTotal - lastMonthTotal) / (lastMonthTotal || 1)) * 100
+                    ).toFixed(0)}
+                    %
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.summaryCard}>
+                <View style={styles.summaryCardContent}>
+                  <Text style={styles.summaryCardLabel}>Ano</Text>
+                  <Text style={styles.summaryCardValue}>{renderMaskedValue(yearTotal)}</Text>
+                  <Text style={styles.summaryCardSubtext}>{new Date().getFullYear()}</Text>
+                </View>
               </TouchableOpacity>
             </View>
-          ) : (
-            recentExpenses.map((expense, index) => (
-              <TouchableOpacity 
-                key={expense.id} 
-                style={styles.expenseItem}
-                onPress={() => navigation.navigate('Despesas')}
-              >
-                <View style={styles.expenseIcon}>
-                  <Text style={styles.categoryIcon}>
-                    {expense.categoryIcon || '💰'}
-                  </Text>
-                </View>
-                <View style={styles.expenseInfo}>
-                  <Text style={styles.expenseDescription}>{expense.description}</Text>
-                  <Text style={styles.expenseDetails}>
-                    {expense.categoryName || 'Sem categoria'} • {expense.paymentMethodName || 'Dinheiro'}
-                  </Text>
-                </View>
-                <View style={styles.expenseAmount}>
-                  <Text style={styles.expenseValue}>{formatCurrency(expense.amount)}</Text>
-                  <Text style={styles.expenseDate}>{formatDate(expense.date)}</Text>
-                </View>
-              </TouchableOpacity>
-            ))
-          )}
-        </View>
+          </View>
 
-        {/* Botão flutuante */}
-        <TouchableOpacity 
-          style={styles.fab}
+          {/* Gráfico de evolução - Estilo Nubank */}
+          {lineChartData && (
+            <View style={styles.chartSection}>
+              <Text style={styles.sectionTitle}>Evolução semanal</Text>
+              <View style={styles.chartContainer}>
+                <LineChart
+                  data={lineChartData}
+                  width={screenWidth - NUBANK_SPACING.LG * 2}
+                  height={220}
+                  chartConfig={chartConfig}
+                  bezier
+                  style={styles.chart}
+                  withInnerLines={false}
+                  withOuterLines={false}
+                  withVerticalLabels={true}
+                  withHorizontalLabels={true}
+                  segments={4}
+                />
+              </View>
+            </View>
+          )}
+
+          {/* Gastos por categoria - Estilo Nubank */}
+          {categoryData.length > 0 && (
+            <View style={styles.categorySection}>
+              <Text style={styles.sectionTitle}>Por categoria</Text>
+              {categoryData.slice(0, 5).map((category, index) => {
+                const percentage = (category.total / monthTotal) * 100;
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.categoryCard}
+                    onPress={() => navigation.navigate('Despesas')}
+                  >
+                    <View style={styles.categoryLeft}>
+                      <Text style={styles.categoryIcon}>{category.icon}</Text>
+                      <View style={styles.categoryInfo}>
+                        <Text style={styles.categoryName}>{category.name}</Text>
+                        <Text style={styles.categoryCount}>
+                          {category.count} {category.count === 1 ? 'despesa' : 'despesas'}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.categoryRight}>
+                      <Text style={styles.categoryValue}>{formatCurrency(category.total)}</Text>
+                      <Text style={styles.categoryPercentage}>{percentage.toFixed(0)}%</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Despesas recentes - Estilo Nubank */}
+          <View style={styles.recentSection}>
+            <View style={styles.recentHeader}>
+              <Text style={styles.sectionTitle}>Últimas transações</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Despesas')}>
+                <Text style={styles.seeAllButton}>Ver todas</Text>
+              </TouchableOpacity>
+            </View>
+
+            {recentExpenses.length === 0 ? (
+              <View style={styles.emptyState}>
+                <MaterialCommunityIcons
+                  name='receipt-text'
+                  size={48}
+                  color={NUBANK_COLORS.TEXT_TERTIARY}
+                />
+                <Text style={styles.emptyText}>Nenhuma despesa registrada</Text>
+                <TouchableOpacity
+                  style={styles.addButton}
+                  onPress={() => navigation.navigate('Despesas')}
+                >
+                  <Text style={styles.addButtonText}>Adicionar despesa</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              recentExpenses.map(expense => (
+                <TouchableOpacity
+                  key={expense.id}
+                  style={styles.transactionCard}
+                  onPress={() => navigation.navigate('Despesas')}
+                >
+                  <View style={styles.transactionLeft}>
+                    <View style={styles.transactionIcon}>
+                      <Text>{expense.categoryIcon || '💰'}</Text>
+                    </View>
+                    <View style={styles.transactionInfo}>
+                      <Text style={styles.transactionDescription}>{expense.description}</Text>
+                      <Text style={styles.transactionDetails}>
+                        {expense.categoryName || 'Sem categoria'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.transactionRight}>
+                    <Text style={styles.transactionValue}>{formatCurrency(expense.amount)}</Text>
+                    <Text style={styles.transactionDate}>{formatDate(expense.date)}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        </Animated.View>
+      </ScrollView>
+
+      {/* FAB - Estilo Nubank */}
+      <Animated.View
+        style={[
+          styles.fab,
+          {
+            opacity: scaleAnim,
+            transform: [{ scale: scaleAnim }]
+          }
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.fabButton}
           onPress={() => navigation.navigate('Despesas')}
           activeOpacity={0.8}
         >
-          <Text style={styles.fabText}>+</Text>
+          <MaterialCommunityIcons name='plus' size={28} color={NUBANK_COLORS.TEXT_WHITE} />
         </TouchableOpacity>
       </Animated.View>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: NUBANK_COLORS.BACKGROUND
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: NUBANK_COLORS.BACKGROUND
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6B7280',
+    marginTop: NUBANK_SPACING.MD,
+    fontSize: NUBANK_FONT_SIZES.MD,
+    color: NUBANK_COLORS.TEXT_SECONDARY
   },
+
+  // Header Nubank
   header: {
-    backgroundColor: '#6366F1',
-    paddingTop: Platform.OS === 'ios' ? 50 : 20,
-    paddingBottom: 24,
-    paddingHorizontal: 16,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingHorizontal: NUBANK_SPACING.LG,
+    paddingBottom: NUBANK_SPACING.XL
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: NUBANK_SPACING.LG
+  },
+  menuButton: {
+    padding: NUBANK_SPACING.SM
+  },
+  eyeButton: {
+    padding: NUBANK_SPACING.SM
+  },
+  headerContent: {
+    marginTop: NUBANK_SPACING.SM
   },
   greeting: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 4,
+    fontSize: NUBANK_FONT_SIZES.LG,
+    color: NUBANK_COLORS.TEXT_WHITE,
+    fontWeight: NUBANK_FONT_WEIGHTS.REGULAR,
+    marginBottom: NUBANK_SPACING.LG
   },
-  date: {
-    fontSize: 14,
-    color: '#E0E7FF',
-    textTransform: 'capitalize',
+  balanceContainer: {
+    marginTop: NUBANK_SPACING.SM
   },
-  insightsContainer: {
-    marginTop: 20,
-    paddingHorizontal: 16,
+  balanceLabel: {
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.TEXT_WHITE,
+    opacity: 0.8,
+    marginBottom: NUBANK_SPACING.XS
   },
-  insightsScroll: {
-    paddingVertical: 8,
+  balanceValue: {
+    fontSize: NUBANK_FONT_SIZES.XXXL,
+    color: NUBANK_COLORS.TEXT_WHITE,
+    fontWeight: NUBANK_FONT_WEIGHTS.BOLD
   },
-  insightCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginRight: 12,
-    minWidth: 250,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
+
+  // ScrollView
+  scrollView: {
+    flex: 1
   },
-  insightWarning: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#F59E0B',
+
+  // Quick Actions
+  quickActions: {
+    paddingVertical: NUBANK_SPACING.LG,
+    paddingLeft: NUBANK_SPACING.LG
   },
-  insightSuccess: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#10B981',
+  quickActionCard: {
+    alignItems: 'center',
+    marginRight: NUBANK_SPACING.LG
   },
-  insightInfo: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#6366F1',
+  quickActionIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: NUBANK_BORDER_RADIUS.ROUND,
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: NUBANK_SPACING.SM
   },
-  insightTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 4,
+  quickActionText: {
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.TEXT_PRIMARY,
+    fontWeight: NUBANK_FONT_WEIGHTS.MEDIUM
   },
-  insightMessage: {
-    fontSize: 14,
-    color: '#6B7280',
+
+  // Summary Section
+  summarySection: {
+    paddingHorizontal: NUBANK_SPACING.LG,
+    marginTop: NUBANK_SPACING.MD
+  },
+  sectionTitle: {
+    fontSize: NUBANK_FONT_SIZES.XL,
+    fontWeight: NUBANK_FONT_WEIGHTS.BOLD,
+    color: NUBANK_COLORS.TEXT_PRIMARY,
+    marginBottom: NUBANK_SPACING.MD
   },
   summaryCards: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 16,
-    marginTop: 20,
-    justifyContent: 'space-between',
+    marginHorizontal: -NUBANK_SPACING.SM
   },
   summaryCard: {
-    width: '48%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
+    width: '50%',
+    padding: NUBANK_SPACING.SM
   },
-  todayCard: {
-    borderTopWidth: 4,
-    borderTopColor: '#6366F1',
+  summaryCardContent: {
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
+    padding: NUBANK_SPACING.MD,
+    minHeight: 100
   },
-  weekCard: {
-    borderTopWidth: 4,
-    borderTopColor: '#8B5CF6',
+  summaryCardLabel: {
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.TEXT_SECONDARY,
+    marginBottom: NUBANK_SPACING.XS
   },
-  monthCard: {
-    borderTopWidth: 4,
-    borderTopColor: '#EC4899',
+  summaryCardValue: {
+    fontSize: NUBANK_FONT_SIZES.XL,
+    fontWeight: NUBANK_FONT_WEIGHTS.BOLD,
+    color: NUBANK_COLORS.TEXT_PRIMARY,
+    marginBottom: NUBANK_SPACING.XS
   },
-  yearCard: {
-    borderTopWidth: 4,
-    borderTopColor: '#10B981',
+  summaryCardSubtext: {
+    fontSize: NUBANK_FONT_SIZES.XS,
+    color: NUBANK_COLORS.TEXT_TERTIARY
   },
-  cardLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  cardValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  cardSubtext: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 4,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 16,
+
+  // Chart Section
+  chartSection: {
+    marginTop: NUBANK_SPACING.XL,
+    paddingHorizontal: NUBANK_SPACING.LG
   },
   chartContainer: {
-    backgroundColor: '#FFFFFF',
-    margin: 16,
-    padding: 16,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
+    padding: NUBANK_SPACING.MD,
+    alignItems: 'center'
   },
   chart: {
-    marginVertical: 8,
-    borderRadius: 16,
+    borderRadius: NUBANK_BORDER_RADIUS.LG
   },
-  establishmentsContainer: {
-    marginHorizontal: 16,
-    marginTop: 20,
+
+  // Category Section
+  categorySection: {
+    marginTop: NUBANK_SPACING.XL,
+    paddingHorizontal: NUBANK_SPACING.LG
   },
-  establishmentCard: {
+  categoryCard: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
+    justifyContent: 'space-between',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
+    padding: NUBANK_SPACING.MD,
+    marginBottom: NUBANK_SPACING.SM
   },
-  establishmentRank: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#EEF2FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  rankNumber: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#6366F1',
-  },
-  establishmentInfo: {
-    flex: 1,
-  },
-  establishmentName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 2,
-  },
-  establishmentStats: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  anomaliesContainer: {
-    marginHorizontal: 16,
-    marginTop: 20,
-  },
-  anomalyCard: {
+  categoryLeft: {
     flexDirection: 'row',
-    backgroundColor: '#FEF3C7',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
     alignItems: 'center',
-    borderLeftWidth: 4,
-    borderLeftColor: '#F59E0B',
+    flex: 1
   },
-  anomalyIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FDE68A',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+  categoryIcon: {
+    fontSize: 24,
+    marginRight: NUBANK_SPACING.MD
   },
-  anomalyInfo: {
-    flex: 1,
+  categoryInfo: {
+    flex: 1
   },
-  anomalyDescription: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#92400E',
-    marginBottom: 2,
+  categoryName: {
+    fontSize: NUBANK_FONT_SIZES.MD,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    color: NUBANK_COLORS.TEXT_PRIMARY
   },
-  anomalyDetails: {
-    fontSize: 14,
-    color: '#B45309',
+  categoryCount: {
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.TEXT_SECONDARY
   },
-  recentContainer: {
-    marginTop: 20,
-    paddingHorizontal: 16,
-    paddingBottom: 100,
+  categoryRight: {
+    alignItems: 'flex-end'
+  },
+  categoryValue: {
+    fontSize: NUBANK_FONT_SIZES.MD,
+    fontWeight: NUBANK_FONT_WEIGHTS.BOLD,
+    color: NUBANK_COLORS.TEXT_PRIMARY
+  },
+  categoryPercentage: {
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.PRIMARY,
+    fontWeight: NUBANK_FONT_WEIGHTS.MEDIUM
+  },
+
+  // Recent Section
+  recentSection: {
+    marginTop: NUBANK_SPACING.XL,
+    paddingHorizontal: NUBANK_SPACING.LG,
+    paddingBottom: 100
   },
   recentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: NUBANK_SPACING.MD
   },
   seeAllButton: {
-    fontSize: 14,
-    color: '#6366F1',
-    fontWeight: '600',
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.PRIMARY,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD
   },
-  expenseItem: {
+
+  // Transaction Card
+  transactionCard: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
+    justifyContent: 'space-between',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    paddingVertical: NUBANK_SPACING.MD,
+    borderBottomWidth: 1,
+    borderBottomColor: NUBANK_COLORS.BACKGROUND_SECONDARY
   },
-  expenseIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F3F4F6',
+  transactionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1
+  },
+  transactionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: NUBANK_BORDER_RADIUS.ROUND,
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: NUBANK_SPACING.MD
   },
-  categoryIcon: {
-    fontSize: 20,
+  transactionInfo: {
+    flex: 1
   },
-  expenseInfo: {
-    flex: 1,
+  transactionDescription: {
+    fontSize: NUBANK_FONT_SIZES.MD,
+    fontWeight: NUBANK_FONT_WEIGHTS.MEDIUM,
+    color: NUBANK_COLORS.TEXT_PRIMARY
   },
-  expenseDescription: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 2,
+  transactionDetails: {
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.TEXT_SECONDARY
   },
-  expenseDetails: {
-    fontSize: 14,
-    color: '#6B7280',
+  transactionRight: {
+    alignItems: 'flex-end'
   },
-  expenseAmount: {
-    alignItems: 'flex-end',
+  transactionValue: {
+    fontSize: NUBANK_FONT_SIZES.MD,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    color: NUBANK_COLORS.TEXT_PRIMARY
   },
-  expenseValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#DC2626',
+  transactionDate: {
+    fontSize: NUBANK_FONT_SIZES.XS,
+    color: NUBANK_COLORS.TEXT_TERTIARY
   },
-  expenseDate: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 2,
-  },
+
+  // Empty State
   emptyState: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 32,
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
+    padding: NUBANK_SPACING.XL,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
+    marginTop: NUBANK_SPACING.MD
   },
   emptyText: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginBottom: 16,
+    fontSize: NUBANK_FONT_SIZES.MD,
+    color: NUBANK_COLORS.TEXT_SECONDARY,
+    marginVertical: NUBANK_SPACING.MD
   },
   addButton: {
-    backgroundColor: '#6366F1',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: NUBANK_COLORS.PRIMARY,
+    paddingHorizontal: NUBANK_SPACING.LG,
+    paddingVertical: NUBANK_SPACING.MD,
+    borderRadius: NUBANK_BORDER_RADIUS.LG
   },
   addButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    color: NUBANK_COLORS.TEXT_WHITE,
+    fontSize: NUBANK_FONT_SIZES.MD,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD
   },
+
+  // FAB
   fab: {
     position: 'absolute',
-    bottom: 20,
-    right: 20,
+    bottom: NUBANK_SPACING.LG,
+    right: NUBANK_SPACING.LG
+  },
+  fabButton: {
     width: 56,
     height: 56,
-    borderRadius: 28,
-    backgroundColor: '#6366F1',
+    borderRadius: NUBANK_BORDER_RADIUS.ROUND,
+    backgroundColor: NUBANK_COLORS.PRIMARY,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  fabText: {
-    fontSize: 28,
-    color: '#FFFFFF',
-    fontWeight: '300',
-  },
+    ...NUBANK_SHADOWS.LG
+  }
 });

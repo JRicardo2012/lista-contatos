@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,10 @@ import {
   StyleSheet,
   ActivityIndicator,
   Modal,
-  FlatList,
-} from "react-native";
-import { useSQLiteContext } from "expo-sqlite";
-import { useFocusEffect } from "@react-navigation/native";
+  FlatList
+} from 'react-native';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function ExpensePaymentMethodList({ selectedMethod, onMethodSelect }) {
   const db = useSQLiteContext();
@@ -44,16 +44,16 @@ export default function ExpensePaymentMethodList({ selectedMethod, onMethodSelec
         ORDER BY name ASC
       `);
       console.log('💳 Métodos encontrados:', result.length);
-      
+
       // Remove duplicatas baseado no ID
-      const uniqueMethods = result.filter((method, index, self) => 
-        index === self.findIndex(m => m.id === method.id)
+      const uniqueMethods = result.filter(
+        (method, index, self) => index === self.findIndex(m => m.id === method.id)
       );
-      
+
       setPaymentMethods(uniqueMethods);
       console.log('✅ Métodos únicos:', uniqueMethods.length);
     } catch (err) {
-      console.error("❌ Erro ao carregar métodos de pagamento:", err);
+      console.error('❌ Erro ao carregar métodos de pagamento:', err);
     } finally {
       setLoading(false);
     }
@@ -63,7 +63,7 @@ export default function ExpensePaymentMethodList({ selectedMethod, onMethodSelec
     return paymentMethods.find(method => method.id === selectedMethod);
   };
 
-  const handleSelectMethod = (methodId) => {
+  const handleSelectMethod = methodId => {
     console.log('💳 Método de pagamento selecionado:', methodId);
     onMethodSelect(methodId);
     setModalVisible(false);
@@ -83,7 +83,7 @@ export default function ExpensePaymentMethodList({ selectedMethod, onMethodSelec
 
   const renderMethod = ({ item }) => {
     const isSelected = selectedMethod === item.id;
-    
+
     return (
       <TouchableOpacity
         style={[styles.methodItem, isSelected && styles.methodSelected]}
@@ -112,7 +112,7 @@ export default function ExpensePaymentMethodList({ selectedMethod, onMethodSelec
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="small" color="#10b981" />
+        <ActivityIndicator size='small' color='#10b981' />
         <Text style={styles.loadingText}>Carregando formas de pagamento...</Text>
       </View>
     );
@@ -137,42 +137,43 @@ export default function ExpensePaymentMethodList({ selectedMethod, onMethodSelec
     <View style={styles.container}>
       {/* Selector Principal */}
       <TouchableOpacity
-        style={[
-          styles.selector,
-          selectedMethod && styles.selectorSelected
-        ]}
+        style={[styles.selector, selectedMethod && styles.selectorSelected]}
         onPress={() => setModalVisible(true)}
         activeOpacity={0.8}
       >
         <View style={styles.selectorContent}>
-          <View style={[
-            styles.selectorIconContainer,
-            selectedMethod && styles.selectorIconContainerSelected
-          ]}>
+          <View
+            style={[
+              styles.selectorIconContainer,
+              selectedMethod && styles.selectorIconContainerSelected
+            ]}
+          >
             <Text style={styles.selectorIcon}>
               {selectedMethodData ? selectedMethodData.icon : '💳'}
             </Text>
           </View>
-          
+
           <View style={styles.selectorTextContainer}>
-            <Text style={[
-              styles.selectorText,
-              selectedMethod ? styles.selectorTextSelected : styles.selectorTextPlaceholder
-            ]}>
+            <Text
+              style={[
+                styles.selectorText,
+                selectedMethod ? styles.selectorTextSelected : styles.selectorTextPlaceholder
+              ]}
+            >
               {selectedMethodData ? selectedMethodData.name : 'Forma de pagamento (opcional)'}
             </Text>
           </View>
 
           {selectedMethod && (
-            <TouchableOpacity 
-              style={styles.clearButton} 
+            <TouchableOpacity
+              style={styles.clearButton}
               onPress={handleClearSelection}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Text style={styles.clearIcon}>✕</Text>
             </TouchableOpacity>
           )}
-          
+
           <View style={styles.arrowContainer}>
             <Text style={styles.arrow}>▼</Text>
           </View>
@@ -183,7 +184,7 @@ export default function ExpensePaymentMethodList({ selectedMethod, onMethodSelec
       <Modal
         visible={modalVisible}
         transparent={true}
-        animationType="slide"
+        animationType='slide'
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
@@ -195,13 +196,10 @@ export default function ExpensePaymentMethodList({ selectedMethod, onMethodSelec
                 <Text style={styles.modalTitle}>Escolha a forma de pagamento</Text>
               </View>
               <View style={styles.headerButtons}>
-                <TouchableOpacity 
-                  style={styles.refreshIconButton}
-                  onPress={handleManualRefresh}
-                >
+                <TouchableOpacity style={styles.refreshIconButton} onPress={handleManualRefresh}>
                   <Text style={styles.refreshIcon}>🔄</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => setModalVisible(false)}
                   style={styles.closeButtonContainer}
                 >
@@ -213,15 +211,15 @@ export default function ExpensePaymentMethodList({ selectedMethod, onMethodSelec
             {/* Indicador de Loading no Modal */}
             {loading && (
               <View style={styles.modalLoadingContainer}>
-                <ActivityIndicator size="small" color="#10b981" />
+                <ActivityIndicator size='small' color='#10b981' />
                 <Text style={styles.modalLoadingText}>Atualizando...</Text>
               </View>
             )}
-            
+
             {/* Lista de Métodos */}
             <FlatList
               data={paymentMethods}
-              keyExtractor={(item) => `payment-method-${item.id}`}
+              keyExtractor={item => `payment-method-${item.id}`}
               renderItem={renderMethod}
               style={styles.methodList}
               showsVerticalScrollIndicator={false}
@@ -230,10 +228,7 @@ export default function ExpensePaymentMethodList({ selectedMethod, onMethodSelec
 
             {/* Footer do Modal */}
             <View style={styles.modalFooter}>
-              <TouchableOpacity 
-                style={styles.cancelButton}
-                onPress={() => setModalVisible(false)}
-              >
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
                 <Text style={styles.cancelButtonText}>Cancelar</Text>
               </TouchableOpacity>
             </View>
@@ -259,20 +254,20 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 3
   },
   selectorSelected: {
     borderColor: '#8b5cf6',
     backgroundColor: '#f5f3ff',
     shadowColor: '#8b5cf6',
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.2
   },
   selectorContent: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
-    minHeight: 56,
+    minHeight: 56
   },
   selectorIconContainer: {
     width: 40,
@@ -281,27 +276,27 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 12
   },
   selectorIconContainerSelected: {
-    backgroundColor: '#ede9fe',
+    backgroundColor: '#ede9fe'
   },
   selectorIcon: {
-    fontSize: 20,
+    fontSize: 20
   },
   selectorTextContainer: {
-    flex: 1,
+    flex: 1
   },
   selectorText: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '500'
   },
   selectorTextSelected: {
     color: '#6d28d9',
-    fontWeight: '600',
+    fontWeight: '600'
   },
   selectorTextPlaceholder: {
-    color: '#9ca3af',
+    color: '#9ca3af'
   },
   clearButton: {
     width: 28,
@@ -310,30 +305,30 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+    marginRight: 8
   },
   clearIcon: {
     fontSize: 14,
     color: '#dc2626',
-    fontWeight: 'bold',
+    fontWeight: 'bold'
   },
   arrowContainer: {
     width: 24,
     height: 24,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
   arrow: {
     fontSize: 12,
     color: '#6b7280',
-    fontWeight: '600',
+    fontWeight: '600'
   },
 
   // ========== MODAL ==========
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-end'
   },
   modalContent: {
     backgroundColor: '#ffffff',
@@ -344,7 +339,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -8 },
     shadowOpacity: 0.15,
     shadowRadius: 24,
-    elevation: 12,
+    elevation: 12
   },
   modalHeader: {
     flexDirection: 'row',
@@ -353,26 +348,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: '#f3f4f6'
   },
   modalTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    flex: 1
   },
   modalIcon: {
     fontSize: 20,
-    marginRight: 8,
+    marginRight: 8
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1f2937',
+    color: '#1f2937'
   },
   headerButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 8
   },
   refreshIconButton: {
     width: 32,
@@ -380,10 +375,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0fdf4',
     borderRadius: 16,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
   refreshIcon: {
-    fontSize: 16,
+    fontSize: 16
   },
   closeButtonContainer: {
     width: 32,
@@ -391,12 +386,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
     borderRadius: 16,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
   closeButton: {
     fontSize: 16,
     color: '#6b7280',
-    fontWeight: 'bold',
+    fontWeight: 'bold'
   },
 
   // Loading no Modal
@@ -407,19 +402,19 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: '#f0fdf4',
     borderBottomWidth: 1,
-    borderBottomColor: '#dcfce7',
+    borderBottomColor: '#dcfce7'
   },
   modalLoadingText: {
     marginLeft: 8,
     color: '#166534',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600'
   },
 
   // ========== LISTA DE MÉTODOS ==========
   methodList: {
     maxHeight: 400,
-    paddingHorizontal: 20,
+    paddingHorizontal: 20
   },
   methodItem: {
     backgroundColor: '#ffffff',
@@ -433,19 +428,19 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 2
   },
   methodSelected: {
     backgroundColor: '#f5f3ff',
     borderWidth: 2,
     borderColor: '#8b5cf6',
     shadowColor: '#8b5cf6',
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.2
   },
   methodContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    flex: 1
   },
   iconContainer: {
     width: 44,
@@ -454,25 +449,25 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 16
   },
   iconContainerSelected: {
-    backgroundColor: '#ede9fe',
+    backgroundColor: '#ede9fe'
   },
   methodIcon: {
-    fontSize: 20,
+    fontSize: 20
   },
   methodTextContainer: {
-    flex: 1,
+    flex: 1
   },
   methodName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#374151',
+    color: '#374151'
   },
   methodNameSelected: {
     color: '#6d28d9',
-    fontWeight: '700',
+    fontWeight: '700'
   },
   checkContainer: {
     width: 28,
@@ -480,17 +475,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#8b5cf6',
     borderRadius: 14,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
   checkmark: {
     fontSize: 16,
     color: '#ffffff',
-    fontWeight: 'bold',
+    fontWeight: 'bold'
   },
   separator: {
     height: 1,
     backgroundColor: '#f3f4f6',
-    marginHorizontal: 16,
+    marginHorizontal: 16
   },
 
   // ========== FOOTER DO MODAL ==========
@@ -498,18 +493,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
+    borderTopColor: '#f3f4f6'
   },
   cancelButton: {
     backgroundColor: '#f3f4f6',
     borderRadius: 12,
     paddingVertical: 12,
-    alignItems: 'center',
+    alignItems: 'center'
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#6b7280',
+    color: '#6b7280'
   },
 
   // ========== ESTADOS ESPECIAIS ==========
@@ -521,13 +516,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: '#d1d5db'
   },
   loadingText: {
     marginLeft: 12,
     color: '#6b7280',
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '500'
   },
   emptyContainer: {
     alignItems: 'center',
@@ -535,35 +530,35 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: '#d1d5db'
   },
   emptyIcon: {
     fontSize: 48,
     marginBottom: 12,
-    opacity: 0.6,
+    opacity: 0.6
   },
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 8,
+    marginBottom: 8
   },
   emptySubtitle: {
     fontSize: 14,
     color: '#9ca3af',
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: 16
   },
   refreshButton: {
     backgroundColor: '#10b981',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 6,
+    borderRadius: 6
   },
   refreshButtonText: {
     color: '#ffffff',
     fontSize: 14,
-    fontWeight: '600',
-  },
+    fontWeight: '600'
+  }
 });

@@ -1,18 +1,31 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  FlatList, 
-  StyleSheet, 
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
   Alert,
-  ScrollView
+  ScrollView,
+  RefreshControl
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
+import { useAuth } from '../services/AuthContext';
+import { formatCurrency, formatDate } from '../utils/helpers';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import {
+  NUBANK_COLORS,
+  NUBANK_SPACING,
+  NUBANK_FONT_SIZES,
+  NUBANK_BORDER_RADIUS,
+  NUBANK_FONT_WEIGHTS,
+  NUBANK_SHADOWS
+} from '../constants/nubank-theme';
 
 const GroupedExpenseList = () => {
   const db = useSQLiteContext();
+  const { user } = useAuth();
   const [groupedExpenses, setGroupedExpenses] = useState({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -20,17 +33,18 @@ const GroupedExpenseList = () => {
   const [totalDias, setTotalDias] = useState(0);
   const [expandedGroups, setExpandedGroups] = useState({}); // Estado para controlar grupos expandidos
   const [lastUpdated, setLastUpdated] = useState(null); // Timestamp da última atualização
+  const [error, setError] = useState(null); // Estado de erro
 
-  // Gera os últimos 7 dias
-  const generateLast7Days = () => {
+  // Gera os últimos 7 dias (memoizado para performance)
+  const generateLast7Days = useCallback(() => {
     const days = [];
     for (let i = 0; i < 7; i++) {
       const date = new Date();
       date.setDate(date.getDate() - i);
-      
+
       const formatted = date.toLocaleDateString('pt-BR');
       const dayName = date.toLocaleDateString('pt-BR', { weekday: 'long' });
-      
+
       let displayName, emoji;
       if (i === 0) {
         displayName = 'Hoje';
@@ -42,7 +56,7 @@ const GroupedExpenseList = () => {
         displayName = dayName.charAt(0).toUpperCase() + dayName.slice(1);
         emoji = '📅';
       }
-      
+
       days.push({
         formatted,
         displayName,
@@ -51,16 +65,19 @@ const GroupedExpenseList = () => {
       });
     }
     return days;
-  };
+  }, []);
 
   useEffect(() => {
-    if (db) {
+    if (db && user) {
       loadGroupedExpenses(true);
+    } else if (!user) {
+      setError('Usuário não autenticado');
+      setLoading(false);
     } else {
       // Se não tem db ainda, cria estrutura vazia dos últimos 7 dias
       const emptyStructure = {};
       const last7Days = generateLast7Days();
-      
+
       last7Days.forEach(day => {
         emptyStructure[day.formatted] = {
           expenses: [],
@@ -68,41 +85,41 @@ const GroupedExpenseList = () => {
           dateInfo: day
         };
       });
-      
+
       setGroupedExpenses(emptyStructure);
       setTotalGeral(0);
       setTotalDias(0);
     }
-  }, [db]);
+  }, [db, user, loadGroupedExpenses, generateLast7Days]);
 
-  // Sistema de notificação automática melhorado
+  // Sistema de notificação automática melhorado com useCallback
+  const handleExpenseUpdate = useCallback(() => {
+    console.log('📢 Recebeu notificação de mudança - recarregando resumo...');
+    if (db && user && !loading) {
+      // Força reload com timeout para garantir que banco foi atualizado
+      setTimeout(() => {
+        loadGroupedExpenses(false);
+      }, 100);
+    }
+  }, [db, user, loading, loadGroupedExpenses]);
+
   useEffect(() => {
     if (!global.expenseListeners) {
       global.expenseListeners = [];
     }
 
-    const updateFunction = () => {
-      console.log('📢 Recebeu notificação de mudança - recarregando resumo...');
-      if (db && !loading) {
-        // Força reload com timeout para garantir que banco foi atualizado
-        setTimeout(() => {
-          loadGroupedExpenses(false);
-        }, 100);
-      }
-    };
-
-    global.expenseListeners.push(updateFunction);
+    global.expenseListeners.push(handleExpenseUpdate);
 
     // Cleanup melhorado
     return () => {
       if (global.expenseListeners) {
-        const index = global.expenseListeners.indexOf(updateFunction);
+        const index = global.expenseListeners.indexOf(handleExpenseUpdate);
         if (index > -1) {
           global.expenseListeners.splice(index, 1);
         }
       }
     };
-  }, [db, loading]);
+  }, [handleExpenseUpdate]);
 
   // Auto-reload a cada 30 segundos dos últimos 7 dias (desabilitado temporariamente para debug)
   useEffect(() => {
@@ -113,22 +130,31 @@ const GroupedExpenseList = () => {
     //     loadGroupedExpenses(false);
     //   }
     // }, 30000);
-
     // return () => clearInterval(interval);
   }, [db, loading, refreshing]);
 
-  const loadGroupedExpenses = async (isInitialLoad = false) => {
-    try {
-      console.log('🔍 === CARREGANDO RESUMO ÚLTIMOS 7 DIAS ===');
-      
-      if (isInitialLoad) {
-        setLoading(true);
-      } else {
-        setRefreshing(true);
+  const loadGroupedExpenses = useCallback(
+    async (isInitialLoad = false) => {
+      if (!db || !user) {
+        setError('Database ou usuário não disponível');
+        setLoading(false);
+        return;
       }
 
-      // Busca despesas dos últimos 7 dias
-      const result = await db.getAllAsync(`
+      try {
+        console.log('🔍 === CARREGANDO RESUMO ÚLTIMOS 7 DIAS PARA USUÁRIO ===', user.id);
+
+        setError(null); // Limpa erros anteriores
+
+        if (isInitialLoad) {
+          setLoading(true);
+        } else {
+          setRefreshing(true);
+        }
+
+        // Busca despesas dos últimos 7 dias FILTRADA POR USUÁRIO
+        const result = await db.getAllAsync(
+          `
         SELECT 
           e.id, 
           e.description, 
@@ -139,388 +165,482 @@ const GroupedExpenseList = () => {
           COALESCE(pm.name, '') as payment_method,
           COALESCE(pm.icon, '') as payment_icon
         FROM expenses e
-        LEFT JOIN categories c ON e.categoryId = c.id
-        LEFT JOIN payment_methods pm ON e.payment_method_id = pm.id
+        LEFT JOIN categories c ON e.categoryId = c.id AND c.user_id = ?
+        LEFT JOIN payment_methods pm ON e.payment_method_id = pm.id AND pm.user_id = ?
         WHERE date(e.date) >= date('now', '-7 days')
+        AND e.user_id = ?
         ORDER BY e.date DESC
-      `);
-
-      console.log('📊 Despesas dos últimos 7 dias:', result.length);
-      console.log('📅 Primeiras 3 datas no banco:', result.slice(0, 3).map(r => r.date));
-
-      // Gera últimos 7 dias
-      const last7Days = generateLast7Days();
-      console.log('📅 Últimos 7 dias gerados:', last7Days);
-
-      const grouped = {};
-      let total = 0;
-      let validExpenses = 0;
-      
-      // Primeiro, cria estrutura para todos os 7 dias
-      last7Days.forEach(day => {
-        grouped[day.formatted] = {
-          expenses: [],
-          isEmpty: true,
-          dateInfo: day
-        };
-      });
-
-      // Depois, popula com as despesas existentes
-      result.forEach((item, index) => {
-        try {
-          let dateKey;
-          if (item.date) {
-            let date;
-            
-            if (item.date.includes('-')) {
-              date = new Date(item.date);
-            } else {
-              date = new Date(item.date);
-            }
-            
-            if (isNaN(date.getTime())) {
-              console.warn(`⚠️ Data inválida no item ${index}:`, item.date);
-              return;
-            } else {
-              const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
-              dateKey = localDate.toLocaleDateString('pt-BR');
-              console.log(`📅 Item ${index}: ${item.date} -> ${dateKey}`);
-            }
-          } else {
-            console.warn(`⚠️ Data ausente no item ${index}`);
-            return;
-          }
-          
-          // Só processa se o dia está nos últimos 7 dias
-          if (grouped[dateKey]) {
-            let value = 0;
-            if (item.value !== null && item.value !== undefined) {
-              value = parseFloat(item.value);
-              if (isNaN(value)) {
-                console.warn(`⚠️ Valor inválido no item ${index}:`, item.value);
-                value = 0;
-              }
-            }
-            
-            const expense = {
-              id: item.id,
-              description: item.description || 'Sem descrição',
-              value: value,
-              date: item.date,
-              category: item.category,
-              icon: item.icon,
-              payment_method: item.payment_method,
-              payment_icon: item.payment_icon
-            };
-            
-            grouped[dateKey].expenses.push(expense);
-            grouped[dateKey].isEmpty = false;
-            total += value;
-            validExpenses++;
-          }
-          
-        } catch (error) {
-          console.error(`❌ Erro ao processar item ${index}:`, error, item);
-        }
-      });
-
-      console.log('✅ Processamento concluído:');
-      console.log(`   - ${validExpenses} despesas válidas`);
-      console.log(`   - 7 dias processados`);
-      console.log(`   - Dias com gastos:`, Object.keys(grouped).filter(day => grouped[day] && !grouped[day].isEmpty));
-      console.log(`   - Total: R$ ${total.toFixed(2)}`);
-
-      setGroupedExpenses(grouped);
-      setTotalGeral(total);
-      setTotalDias(Object.keys(grouped).filter(day => grouped[day] && !grouped[day].isEmpty).length);
-      setLastUpdated(new Date());
-      
-    } catch (error) {
-      console.error('❌ Erro ao carregar despesas agrupadas:', error);
-      if (isInitialLoad) {
-        Alert.alert(
-          'Erro', 
-          'Não foi possível carregar o resumo. Verifique o console para detalhes.'
+      `,
+          [user.id, user.id, user.id]
         );
-      }
-    } finally {
-      if (isInitialLoad) {
-        setLoading(false);
-      } else {
-        setRefreshing(false);
-      }
-    }
-  };
 
-  async function debugDatabase() {
+        console.log('📊 Despesas dos últimos 7 dias:', result.length);
+        console.log(
+          '📅 Primeiras 3 datas no banco:',
+          result.slice(0, 3).map(r => r.date)
+        );
+
+        // Gera últimos 7 dias
+        const last7Days = generateLast7Days();
+        console.log('📅 Últimos 7 dias gerados:', last7Days);
+
+        const grouped = {};
+        let total = 0;
+        let validExpenses = 0;
+
+        // Primeiro, cria estrutura para todos os 7 dias
+        last7Days.forEach(day => {
+          grouped[day.formatted] = {
+            expenses: [],
+            isEmpty: true,
+            dateInfo: day
+          };
+        });
+
+        // Depois, popula com as despesas existentes
+        result.forEach((item, index) => {
+          try {
+            let dateKey;
+            if (item.date) {
+              let date;
+
+              if (item.date.includes('-')) {
+                date = new Date(item.date);
+              } else {
+                date = new Date(item.date);
+              }
+
+              if (isNaN(date.getTime())) {
+                console.warn(`⚠️ Data inválida no item ${index}:`, item.date);
+                return;
+              } else {
+                const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+                dateKey = localDate.toLocaleDateString('pt-BR');
+                console.log(`📅 Item ${index}: ${item.date} -> ${dateKey}`);
+              }
+            } else {
+              console.warn(`⚠️ Data ausente no item ${index}`);
+              return;
+            }
+
+            // Só processa se o dia está nos últimos 7 dias
+            if (grouped[dateKey]) {
+              let value = 0;
+              if (item.value !== null && item.value !== undefined) {
+                value = parseFloat(item.value);
+                if (isNaN(value)) {
+                  console.warn(`⚠️ Valor inválido no item ${index}:`, item.value);
+                  value = 0;
+                }
+              }
+
+              const expense = {
+                id: item.id,
+                description: item.description || 'Sem descrição',
+                value: value,
+                date: item.date,
+                category: item.category,
+                icon: item.icon,
+                payment_method: item.payment_method,
+                payment_icon: item.payment_icon
+              };
+
+              grouped[dateKey].expenses.push(expense);
+              grouped[dateKey].isEmpty = false;
+              total += value;
+              validExpenses++;
+            }
+          } catch (error) {
+            console.error(`❌ Erro ao processar item ${index}:`, error, item);
+          }
+        });
+
+        console.log('✅ Processamento concluído:');
+        console.log(`   - ${validExpenses} despesas válidas`);
+        console.log(`   - 7 dias processados`);
+        console.log(
+          `   - Dias com gastos:`,
+          Object.keys(grouped).filter(day => grouped[day] && !grouped[day].isEmpty)
+        );
+        console.log(`   - Total: R$ ${total.toFixed(2)}`);
+
+        setGroupedExpenses(grouped);
+        setTotalGeral(total);
+        setTotalDias(
+          Object.keys(grouped).filter(day => grouped[day] && !grouped[day].isEmpty).length
+        );
+        setLastUpdated(new Date());
+      } catch (error) {
+        console.error('❌ Erro ao carregar despesas agrupadas:', error);
+        setError('Erro ao carregar dados: ' + error.message);
+
+        if (isInitialLoad) {
+          Alert.alert('Erro', 'Não foi possível carregar o resumo. Tente novamente.');
+        }
+      } finally {
+        if (isInitialLoad) {
+          setLoading(false);
+        } else {
+          setRefreshing(false);
+        }
+      }
+    },
+    [db, user, generateLast7Days]
+  );
+
+  const debugDatabase = useCallback(async () => {
+    if (!db || !user) {
+      Alert.alert('Erro', 'Database ou usuário não disponível');
+      return;
+    }
+
     try {
-      console.log('🔍 === DEBUG DOS ÚLTIMOS 7 DIAS ===');
-      
-      const expensesStructure = await db.getAllAsync("PRAGMA table_info(expenses)");
+      console.log('🔍 === DEBUG DOS ÚLTIMOS 7 DIAS PARA USUÁRIO ===', user.id);
+
+      const expensesStructure = await db.getAllAsync('PRAGMA table_info(expenses)');
       console.log('🏗️ Estrutura da tabela expenses:', expensesStructure);
-      
-      const expensesCount = await db.getFirstAsync("SELECT COUNT(*) as total FROM expenses");
-      console.log('📊 Total de despesas no banco:', expensesCount.total);
-      
-      // Busca despesas dos últimos 7 dias
-      const last7DaysExpenses = await db.getAllAsync(`
+
+      const expensesCount = await db.getFirstAsync(
+        'SELECT COUNT(*) as total FROM expenses WHERE user_id = ?',
+        [user.id]
+      );
+      console.log('📊 Total de despesas do usuário:', expensesCount.total);
+
+      // Busca despesas dos últimos 7 dias FILTRADA POR USUÁRIO
+      const last7DaysExpenses = await db.getAllAsync(
+        `
         SELECT *, datetime(date, 'localtime') as formatted_date 
         FROM expenses 
         WHERE date(date) >= date('now', '-7 days')
+        AND user_id = ?
         ORDER BY date DESC
-      `);
-      console.log('📄 Despesas dos últimos 7 dias:', last7DaysExpenses);
-      
+      `,
+        [user.id]
+      );
+      console.log('📄 Despesas dos últimos 7 dias do usuário:', last7DaysExpenses);
+
       // Verifica especificamente despesas de hoje
       const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-      const todayExpenses = await db.getAllAsync(`
+      const todayExpenses = await db.getAllAsync(
+        `
         SELECT * FROM expenses 
         WHERE date(date) = date('${today}')
+        AND user_id = ?
         ORDER BY date DESC
-      `);
-      console.log('📅 Despesas de hoje:', todayExpenses);
-      
-      const categoriesCount = await db.getFirstAsync("SELECT COUNT(*) as total FROM categories");
-      console.log('📂 Total de categorias:', categoriesCount.total);
-      
+      `,
+        [user.id]
+      );
+      console.log('📅 Despesas de hoje do usuário:', todayExpenses);
+
+      const categoriesCount = await db.getFirstAsync(
+        'SELECT COUNT(*) as total FROM categories WHERE user_id = ?',
+        [user.id]
+      );
+      console.log('📂 Total de categorias do usuário:', categoriesCount.total);
+
       // Calcula estatísticas dos últimos 7 dias
-      const daysWithExpenses = Object.keys(groupedExpenses).filter(day => 
-        groupedExpenses[day] && !groupedExpenses[day].isEmpty
+      const daysWithExpenses = Object.keys(groupedExpenses).filter(
+        day => groupedExpenses[day] && !groupedExpenses[day].isEmpty
       ).length;
       const daysWithoutExpenses = 7 - daysWithExpenses;
-      
+
       // Força reload após debug
       await loadGroupedExpenses(false);
-      
+
       Alert.alert(
-        '🔍 Debug - Últimos 7 Dias',
+        '🔍 Debug - Últimos 7 Dias (Usuário: ' + user.name + ')',
         `Despesas total: ${expensesCount.total}\nÚltimos 7 dias: ${last7DaysExpenses.length}\nDespesas hoje: ${todayExpenses.length}\nDias com gastos: ${daysWithExpenses}\nDias economizando: ${daysWithoutExpenses}\nCategorias: ${categoriesCount.total}\n\nResumo foi recarregado!`
       );
-      
     } catch (error) {
       console.error('❌ Erro no debug:', error);
       Alert.alert('Erro', 'Erro ao acessar banco: ' + error.message);
     }
-  }
+  }, [db, user, groupedExpenses, loadGroupedExpenses]);
 
-  function formatCurrency(value) {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(value || 0);
-  }
-
-  function formatDateHeader(dateString) {
-    // Para compatibilidade com a nova estrutura
-    const dayData = groupedExpenses[dateString]?.dateInfo;
-    if (dayData) {
-      return {
-        main: dayData.displayName,
-        sub: dateString,
-        emoji: dayData.emoji
-      };
+  // Função de formatação memoizada (usando helper se disponível)
+  const formatCurrencyLocal = useCallback(value => {
+    if (formatCurrency) {
+      return formatCurrency(value);
     }
-    
-    // Fallback para o formato antigo
-    try {
-      const date = new Date(dateString.split('/').reverse().join('-'));
-      const today = new Date();
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      
-      if (date.toDateString() === today.toDateString()) {
-        return { main: 'Hoje', sub: dateString, emoji: '🌟' };
-      } else if (date.toDateString() === yesterday.toDateString()) {
-        return { main: 'Ontem', sub: dateString, emoji: '🕐' };
-      } else {
-        const dayName = date.toLocaleDateString('pt-BR', { weekday: 'long' });
-        return { 
-          main: dayName.charAt(0).toUpperCase() + dayName.slice(1), 
+    // Fallback
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value || 0);
+  }, []);
+
+  const formatDateHeader = useCallback(
+    dateString => {
+      // Para compatibilidade com a nova estrutura
+      const dayData = groupedExpenses[dateString]?.dateInfo;
+      if (dayData) {
+        return {
+          main: dayData.displayName,
           sub: dateString,
-          emoji: '📅'
+          emoji: dayData.emoji
         };
       }
-    } catch (error) {
-      return { main: dateString, sub: '', emoji: '📅' };
-    }
-  }
 
-  // Mensagens motivacionais para dias sem gastos
-  const getEconomyMessage = () => {
+      // Fallback para o formato antigo
+      try {
+        const date = new Date(dateString.split('/').reverse().join('-'));
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+
+        if (date.toDateString() === today.toDateString()) {
+          return { main: 'Hoje', sub: dateString, emoji: '🌟' };
+        } else if (date.toDateString() === yesterday.toDateString()) {
+          return { main: 'Ontem', sub: dateString, emoji: '🕐' };
+        } else {
+          const dayName = date.toLocaleDateString('pt-BR', { weekday: 'long' });
+          return {
+            main: dayName.charAt(0).toUpperCase() + dayName.slice(1),
+            sub: dateString,
+            emoji: '📅'
+          };
+        }
+      } catch (error) {
+        return { main: dateString, sub: '', emoji: '📅' };
+      }
+    },
+    [groupedExpenses]
+  );
+
+  // Mensagens motivacionais para dias sem gastos (memoizada)
+  const getEconomyMessage = useCallback(() => {
     const messages = [
-      "🎯 Parabéns! Você está economizando!",
-      "💪 Dia sem gastos! Continue assim!",
-      "🌟 Excelente! Controle total das finanças!",
-      "🏆 Dia de economia! Você está no caminho certo!",
-      "💚 Sem gastos hoje! Sua carteira agradece!",
-      "🎉 Dia livre de despesas! Que disciplina!",
-      "⭐ Zero gastos! Você é um exemplo!",
-      "🥇 Perfeito! Dia de economia total!"
+      '🎯 Parabéns! Você está economizando!',
+      '💪 Dia sem gastos! Continue assim!',
+      '🌟 Excelente! Controle total das finanças!',
+      '🏆 Dia de economia! Você está no caminho certo!',
+      '💚 Sem gastos hoje! Sua carteira agradece!',
+      '🎉 Dia livre de despesas! Que disciplina!',
+      '⭐ Zero gastos! Você é um exemplo!',
+      '🥇 Perfeito! Dia de economia total!'
     ];
-    
-    return messages[Math.floor(Math.random() * messages.length)];
-  };
 
-  async function handleDeleteExpense(id, description) {
-    Alert.alert(
-      "⚠️ Confirmar Exclusão",
-      `Deseja excluir "${description}"?`,
-      [
-        { text: "Cancelar", style: "cancel" },
+    return messages[Math.floor(Math.random() * messages.length)];
+  }, []);
+
+  const handleDeleteExpense = useCallback(
+    async (id, description) => {
+      if (!user) {
+        Alert.alert('Erro', 'Usuário não autenticado');
+        return;
+      }
+
+      Alert.alert('⚠️ Confirmar Exclusão', `Deseja excluir "${description}"?`, [
+        { text: 'Cancelar', style: 'cancel' },
         {
-          text: "Excluir",
-          style: "destructive",
+          text: 'Excluir',
+          style: 'destructive',
           onPress: async () => {
             try {
-              await db.runAsync("DELETE FROM expenses WHERE id = ?", [id]);
+              // Verifica se a despesa pertence ao usuário antes de deletar
+              await db.runAsync('DELETE FROM expenses WHERE id = ? AND user_id = ?', [id, user.id]);
               await loadGroupedExpenses(false);
-              Alert.alert("Sucesso", "Despesa excluída!");
-            } catch (error) {
-              console.error("Erro ao excluir:", error);
-              Alert.alert("Erro", "Não foi possível excluir a despesa.");
-            }
-          },
-        },
-      ]
-    );
-  }
 
-  // Função para alternar expansão do grupo
-  const toggleGroupExpansion = (date) => {
+              // Notifica outros componentes sobre a mudança
+              if (global.expenseListeners) {
+                global.expenseListeners.forEach(listener => {
+                  if (typeof listener === 'function') {
+                    listener();
+                  }
+                });
+              }
+
+              Alert.alert('Sucesso', 'Despesa excluída!');
+            } catch (error) {
+              console.error('Erro ao excluir:', error);
+              Alert.alert('Erro', 'Não foi possível excluir a despesa.');
+            }
+          }
+        }
+      ]);
+    },
+    [db, user, loadGroupedExpenses]
+  );
+
+  // Função para alternar expansão do grupo (memoizada)
+  const toggleGroupExpansion = useCallback(date => {
     setExpandedGroups(prev => ({
       ...prev,
       [date]: !prev[date]
     }));
-  };
+  }, []);
 
-  // Renderiza item de despesa compacto (só aparece quando grupo expandido)
-  const renderExpenseItem = ({ item, index, isLast }) => {
-    return (
-      <View style={styles.expenseCard}>
-        <TouchableOpacity 
-          style={[
-            styles.expenseContent,
-            isLast && styles.expenseContentLast
-          ]}
-          activeOpacity={0.7}
-        >
-          {/* Ícone da categoria */}
-          <View style={styles.categoryIconContainer}>
-            <Text style={styles.categoryIcon}>{item.icon || '📦'}</Text>
-          </View>
-          
-          {/* Informações da despesa em linha */}
-          <View style={styles.expenseInfo}>
-            <View style={styles.expenseLeft}>
-              <Text style={styles.expenseDescription} numberOfLines={1}>
-                {item.description}
-              </Text>
-              <Text style={styles.expenseCategory}>
-                📂 {item.category}
-                {item.payment_method && ` • ${item.payment_icon || '💳'} ${item.payment_method}`}
-              </Text>
+  // Renderiza item de despesa compacto (só aparece quando grupo expandido) - memoizado
+  const renderExpenseItem = useCallback(
+    ({ item, index, isLast }) => {
+      return (
+        <View style={styles.expenseCard}>
+          <TouchableOpacity
+            style={[styles.expenseContent, isLast && styles.expenseContentLast]}
+            activeOpacity={0.7}
+          >
+            {/* Ícone da categoria */}
+            <View style={styles.categoryIconContainer}>
+              <Text style={styles.categoryIcon}>{item.icon || '📦'}</Text>
             </View>
-            <Text style={styles.expenseAmount}>
-              {formatCurrency(item.value)}
-            </Text>
-          </View>
-        </TouchableOpacity>
-        
-        {/* Botão de excluir */}
-        <TouchableOpacity 
-          style={[
-            styles.deleteButton,
-            isLast && styles.deleteButtonLast
-          ]}
-          onPress={() => handleDeleteExpense(item.id, item.description)}
-        >
-          <Text style={styles.deleteText}>🗑️</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
 
-  // Renderiza grupo por data com opção de expansão
-  const renderGroup = ({ item: date }) => {
-    const dayData = groupedExpenses[date];
-    
-    // Verificação de segurança
-    if (!dayData) {
-      console.warn('⚠️ dayData não encontrado para:', date);
-      return null;
-    }
-    
-    const expenses = dayData.expenses || [];
-    const isEmpty = dayData.isEmpty !== false; // Considera true se undefined
-    const total = expenses.reduce((sum, item) => sum + (item.value || 0), 0);
-    const dateFormatted = formatDateHeader(date);
-    const isExpanded = expandedGroups[date];
-    
-    return (
-      <View style={styles.groupContainer}>
-        {/* Header do grupo - sempre visível e clicável */}
-        <TouchableOpacity 
-          style={[
-            styles.groupHeader,
-            (!isExpanded || isEmpty) && styles.groupHeaderCollapsed
-          ]}
-          onPress={() => !isEmpty && toggleGroupExpansion(date)}
-          activeOpacity={isEmpty ? 1 : 0.7}
-        >
-          <View style={styles.groupHeaderLeft}>
-            <Text style={styles.groupEmoji}>{dateFormatted.emoji}</Text>
-            <View style={styles.groupDateContainer}>
-              <Text style={styles.groupDateMain}>{dateFormatted.main}</Text>
-              {dateFormatted.sub && (
-                <Text style={styles.groupDateSub}>{dateFormatted.sub}</Text>
+            {/* Informações da despesa em linha */}
+            <View style={styles.expenseInfo}>
+              <View style={styles.expenseLeft}>
+                <Text style={styles.expenseDescription} numberOfLines={1}>
+                  {item.description}
+                </Text>
+                <Text style={styles.expenseCategory}>
+                  📂 {item.category}
+                  {item.payment_method && ` • ${item.payment_icon || '💳'} ${item.payment_method}`}
+                </Text>
+              </View>
+              <Text style={styles.expenseAmount}>{formatCurrencyLocal(item.value)}</Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Botão de excluir */}
+          <TouchableOpacity
+            style={[styles.deleteButton, isLast && styles.deleteButtonLast]}
+            onPress={() => handleDeleteExpense(item.id, item.description)}
+          >
+            <MaterialCommunityIcons name='delete-outline' size={18} color={NUBANK_COLORS.ERROR} />
+          </TouchableOpacity>
+        </View>
+      );
+    },
+    [formatCurrencyLocal, handleDeleteExpense]
+  );
+
+  // Renderiza grupo por data com opção de expansão (memoizado)
+  const renderGroup = useCallback(
+    ({ item: date }) => {
+      const dayData = groupedExpenses[date];
+
+      // Verificação de segurança
+      if (!dayData) {
+        console.warn('⚠️ dayData não encontrado para:', date);
+        return null;
+      }
+
+      const expenses = dayData.expenses || [];
+      const isEmpty = dayData.isEmpty !== false; // Considera true se undefined
+      const total = expenses.reduce((sum, item) => sum + (item.value || 0), 0);
+      const dateFormatted = formatDateHeader(date);
+      const isExpanded = expandedGroups[date];
+
+      return (
+        <View style={styles.groupContainer}>
+          {/* Header do grupo - sempre visível e clicável */}
+          <TouchableOpacity
+            style={[styles.groupHeader, (!isExpanded || isEmpty) && styles.groupHeaderCollapsed]}
+            onPress={() => !isEmpty && toggleGroupExpansion(date)}
+            activeOpacity={isEmpty ? 1 : 0.7}
+          >
+            <View style={styles.groupHeaderLeft}>
+              <View style={styles.groupEmojiContainer}>
+                <Text style={styles.groupEmoji}>{dateFormatted.emoji}</Text>
+              </View>
+              <View style={styles.groupDateContainer}>
+                <Text style={styles.groupDateMain}>{dateFormatted.main}</Text>
+                {dateFormatted.sub && <Text style={styles.groupDateSub}>{dateFormatted.sub}</Text>}
+              </View>
+            </View>
+            <View style={styles.groupHeaderRight}>
+              {isEmpty ? (
+                <View style={styles.economyContainer}>
+                  <MaterialCommunityIcons
+                    name='piggy-bank'
+                    size={16}
+                    color={NUBANK_COLORS.SUCCESS}
+                    style={styles.economyIcon}
+                  />
+                  <Text style={styles.economyText}>R$ 0,00</Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={styles.groupTotal}>{formatCurrencyLocal(total)}</Text>
+                  <View style={styles.groupMetaContainer}>
+                    <Text style={styles.groupCount}>
+                      {expenses.length} item{expenses.length !== 1 ? 's' : ''}
+                    </Text>
+                    <MaterialCommunityIcons
+                      name={isExpanded ? 'chevron-down' : 'chevron-right'}
+                      size={16}
+                      color={NUBANK_COLORS.TEXT_SECONDARY}
+                      style={styles.expandIcon}
+                    />
+                  </View>
+                </>
               )}
             </View>
-          </View>
-          <View style={styles.groupHeaderRight}>
-            {isEmpty ? (
-              <View style={styles.economyContainer}>
-                <Text style={styles.economyIcon}>💚</Text>
-                <Text style={styles.economyText}>R$ 0,00</Text>
-              </View>
-            ) : (
-              <>
-                <Text style={styles.groupTotal}>{formatCurrency(total)}</Text>
-                <View style={styles.groupMetaContainer}>
-                  <Text style={styles.groupCount}>{expenses.length} item{expenses.length !== 1 ? 's' : ''}</Text>
-                  <Text style={styles.expandIcon}>{isExpanded ? '▼' : '▶'}</Text>
-                </View>
-              </>
-            )}
-          </View>
-        </TouchableOpacity>
-        
-        {/* Conteúdo expandido */}
-        {isEmpty ? (
-          /* Mensagem de economia para dias sem gastos */
-          <View style={styles.economyMessageContainer}>
-            <Text style={styles.economyMessage}>{getEconomyMessage()}</Text>
-          </View>
-        ) : (
-          /* Lista de despesas - só aparece quando expandido */
-          isExpanded && expenses.length > 0 && (
-            <FlatList
-              data={expenses}
-              keyExtractor={(item) => `grouped-expense-${item.id}`}
-              renderItem={({ item, index }) => renderExpenseItem({ item, index, isLast: index === expenses.length - 1 })}
-              scrollEnabled={false}
-              showsVerticalScrollIndicator={false}
-            />
-          )
-        )}
-      </View>
-    );
-  };
+          </TouchableOpacity>
 
+          {/* Conteúdo expandido */}
+          {isEmpty ? (
+            /* Mensagem de economia para dias sem gastos */
+            <View style={styles.economyMessageContainer}>
+              <Text style={styles.economyMessage}>{getEconomyMessage()}</Text>
+            </View>
+          ) : (
+            /* Lista de despesas - só aparece quando expandido */
+            isExpanded &&
+            expenses.length > 0 && (
+              <FlatList
+                data={expenses}
+                keyExtractor={item => `grouped-expense-${item.id}`}
+                renderItem={({ item, index }) =>
+                  renderExpenseItem({ item, index, isLast: index === expenses.length - 1 })
+                }
+                scrollEnabled={false}
+                showsVerticalScrollIndicator={false}
+              />
+            )
+          )}
+        </View>
+      );
+    },
+    [
+      groupedExpenses,
+      expandedGroups,
+      formatDateHeader,
+      formatCurrencyLocal,
+      toggleGroupExpansion,
+      getEconomyMessage,
+      renderExpenseItem
+    ]
+  );
+
+  // Estados de loading e erro
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size='large' color={NUBANK_COLORS.PRIMARY} />
         <Text style={styles.loadingText}>Carregando últimos 7 dias...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <MaterialCommunityIcons
+          name='alert-circle'
+          size={80}
+          color={NUBANK_COLORS.ERROR}
+          style={styles.errorIcon}
+        />
+        <Text style={styles.errorTitle}>Erro ao Carregar</Text>
+        <Text style={styles.errorMessage}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => loadGroupedExpenses(true)}>
+          <MaterialCommunityIcons
+            name='refresh'
+            size={16}
+            color={NUBANK_COLORS.TEXT_WHITE}
+            style={styles.retryButtonIcon}
+          />
+          <Text style={styles.retryButtonText}>Tentar Novamente</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -531,16 +651,22 @@ const GroupedExpenseList = () => {
   if (groupKeys.length === 0 && !loading) {
     return (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyIcon}>📊</Text>
+        <MaterialCommunityIcons
+          name='chart-timeline-variant'
+          size={80}
+          color={NUBANK_COLORS.TEXT_TERTIARY}
+          style={styles.emptyIcon}
+        />
         <Text style={styles.emptyTitle}>Carregando últimos 7 dias</Text>
-        <Text style={styles.emptySubtitle}>
-          Seus gastos dos últimos 7 dias aparecerão aqui!
-        </Text>
-        <TouchableOpacity 
-          style={styles.debugButton}
-          onPress={debugDatabase}
-        >
-          <Text style={styles.debugButtonText}>🔍 Verificar Banco de Dados</Text>
+        <Text style={styles.emptySubtitle}>Seus gastos dos últimos 7 dias aparecerão aqui!</Text>
+        <TouchableOpacity style={styles.debugButton} onPress={debugDatabase}>
+          <MaterialCommunityIcons
+            name='database-search'
+            size={16}
+            color={NUBANK_COLORS.TEXT_WHITE}
+            style={styles.debugButtonIcon}
+          />
+          <Text style={styles.debugButtonText}>Verificar Banco de Dados</Text>
         </TouchableOpacity>
       </View>
     );
@@ -551,58 +677,86 @@ const GroupedExpenseList = () => {
       {/* Header com estatísticas */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <TouchableOpacity 
-            style={styles.debugButtonSmall}
-            onPress={debugDatabase}
-          >
-            <Text style={styles.debugButtonSmallText}>🔍</Text>
+          <TouchableOpacity style={styles.debugButtonSmall} onPress={debugDatabase}>
+            <MaterialCommunityIcons
+              name='database-search'
+              size={20}
+              color={NUBANK_COLORS.WARNING}
+            />
           </TouchableOpacity>
-          <Text style={styles.headerIcon}>📊</Text>
-          <Text style={styles.headerTitle}>Últimos 7 Dias</Text>
-          <TouchableOpacity 
-            style={styles.refreshButton}
-            onPress={() => loadGroupedExpenses(false)}
-          >
-            <Text style={styles.refreshButtonText}>
-              {refreshing ? '🔄' : '↻'}
-            </Text>
+          <View style={styles.headerTitleContainer}>
+            <MaterialCommunityIcons
+              name='chart-timeline-variant'
+              size={24}
+              color={NUBANK_COLORS.PRIMARY}
+              style={styles.headerIcon}
+            />
+            <Text style={styles.headerTitle}>Últimos 7 Dias</Text>
+          </View>
+          <TouchableOpacity style={styles.refreshButton} onPress={() => loadGroupedExpenses(false)}>
+            <MaterialCommunityIcons
+              name={refreshing ? 'loading' : 'refresh'}
+              size={20}
+              color={NUBANK_COLORS.PRIMARY}
+            />
           </TouchableOpacity>
         </View>
-        
+
         {/* Cards de estatísticas */}
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          style={styles.statsContainer}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsContainer}>
           <View style={styles.statCard}>
-            <Text style={styles.statIcon}>💰</Text>
-            <Text style={styles.statValue}>{formatCurrency(totalGeral)}</Text>
+            <MaterialCommunityIcons
+              name='cash-multiple'
+              size={24}
+              color={NUBANK_COLORS.PRIMARY}
+              style={styles.statIcon}
+            />
+            <Text style={styles.statValue}>{formatCurrencyLocal(totalGeral)}</Text>
             <Text style={styles.statLabel}>Total 7 Dias</Text>
           </View>
-          
+
           <View style={styles.statCard}>
-            <Text style={styles.statIcon}>📅</Text>
+            <MaterialCommunityIcons
+              name='calendar-check'
+              size={24}
+              color={NUBANK_COLORS.SUCCESS}
+              style={styles.statIcon}
+            />
             <Text style={styles.statValue}>{totalDias}</Text>
             <Text style={styles.statLabel}>Dias com Gastos</Text>
           </View>
-          
+
           <View style={styles.statCard}>
-            <Text style={styles.statIcon}>💚</Text>
+            <MaterialCommunityIcons
+              name='piggy-bank'
+              size={24}
+              color={NUBANK_COLORS.SUCCESS}
+              style={styles.statIcon}
+            />
             <Text style={styles.statValue}>{7 - totalDias}</Text>
             <Text style={styles.statLabel}>Dias Economia</Text>
           </View>
-          
+
           <View style={styles.statCard}>
-            <Text style={styles.statIcon}>📊</Text>
+            <MaterialCommunityIcons
+              name='chart-line'
+              size={24}
+              color={NUBANK_COLORS.INFO}
+              style={styles.statIcon}
+            />
             <Text style={styles.statValue}>
-              {totalDias > 0 ? formatCurrency(totalGeral / totalDias) : 'R$ 0,00'}
+              {totalDias > 0 ? formatCurrencyLocal(totalGeral / totalDias) : 'R$ 0,00'}
             </Text>
             <Text style={styles.statLabel}>Média por Dia</Text>
           </View>
-          
+
           <View style={styles.statCard}>
-            <Text style={styles.statIcon}>📝</Text>
+            <MaterialCommunityIcons
+              name='format-list-numbered'
+              size={24}
+              color={NUBANK_COLORS.TEXT_SECONDARY}
+              style={styles.statIcon}
+            />
             <Text style={styles.statValue}>
               {Object.values(groupedExpenses).reduce((acc, dayData) => {
                 return acc + (dayData && dayData.expenses ? dayData.expenses.length : 0);
@@ -611,7 +765,7 @@ const GroupedExpenseList = () => {
             <Text style={styles.statLabel}>Total de Itens</Text>
           </View>
         </ScrollView>
-        
+
         {/* Indicador de última atualização */}
         {lastUpdated && (
           <Text style={styles.lastUpdatedText}>
@@ -624,16 +778,26 @@ const GroupedExpenseList = () => {
       <FlatList
         data={groupKeys.sort((a, b) => {
           // Ordena por data (mais recente primeiro)
-          const dateA = groupedExpenses[a]?.dateInfo?.date || new Date(a.split('/').reverse().join('-'));
-          const dateB = groupedExpenses[b]?.dateInfo?.date || new Date(b.split('/').reverse().join('-'));
+          const dateA =
+            groupedExpenses[a]?.dateInfo?.date || new Date(a.split('/').reverse().join('-'));
+          const dateB =
+            groupedExpenses[b]?.dateInfo?.date || new Date(b.split('/').reverse().join('-'));
           return dateB - dateA;
         })}
-        keyExtractor={(item) => item}
+        keyExtractor={item => item}
         renderItem={renderGroup}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
-        refreshing={refreshing}
-        onRefresh={() => loadGroupedExpenses(false)}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadGroupedExpenses(false)}
+            colors={[NUBANK_COLORS.PRIMARY]}
+            tintColor={NUBANK_COLORS.PRIMARY}
+            title='Atualizando últimos 7 dias...'
+            titleColor={NUBANK_COLORS.TEXT_SECONDARY}
+          />
+        }
       />
     </View>
   );
@@ -642,281 +806,271 @@ const GroupedExpenseList = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY
   },
 
   // Header compacto
   header: {
-    backgroundColor: '#fff',
-    paddingTop: 16,
-    paddingBottom: 12,
+    backgroundColor: NUBANK_COLORS.BACKGROUND,
+    paddingTop: NUBANK_SPACING.LG,
+    paddingBottom: NUBANK_SPACING.MD,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    borderBottomColor: NUBANK_COLORS.CARD_BORDER,
+    ...NUBANK_SHADOWS.SM
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginBottom: 12,
+    paddingHorizontal: NUBANK_SPACING.LG,
+    marginBottom: NUBANK_SPACING.MD
   },
   debugButtonSmall: {
-    width: 36,
-    height: 36,
-    backgroundColor: '#fef3c7',
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    backgroundColor: `${NUBANK_COLORS.WARNING}20`,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: `${NUBANK_COLORS.WARNING}40`
   },
-  debugButtonSmallText: {
-    fontSize: 16,
+  headerTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center'
   },
   headerIcon: {
-    fontSize: 28,
+    marginRight: NUBANK_SPACING.SM
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    flex: 1,
-    textAlign: 'center',
-    marginHorizontal: 8,
+    fontSize: NUBANK_FONT_SIZES.XL,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    color: NUBANK_COLORS.TEXT_PRIMARY
   },
   refreshButton: {
-    width: 36,
-    height: 36,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    backgroundColor: `${NUBANK_COLORS.PRIMARY}10`,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  refreshButtonText: {
-    fontSize: 18,
+    borderWidth: 1,
+    borderColor: `${NUBANK_COLORS.PRIMARY}30`
   },
 
   // Cards de estatísticas compactos
   statsContainer: {
-    paddingLeft: 20,
+    paddingLeft: NUBANK_SPACING.LG
   },
   statCard: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 12,
-    marginRight: 10,
-    minWidth: 100,
+    backgroundColor: NUBANK_COLORS.CARD_BACKGROUND,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
+    padding: NUBANK_SPACING.MD,
+    marginRight: NUBANK_SPACING.SM,
+    minWidth: 110,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    borderColor: NUBANK_COLORS.CARD_BORDER,
+    ...NUBANK_SHADOWS.SM
   },
   statIcon: {
-    fontSize: 20,
-    marginBottom: 6,
+    marginBottom: NUBANK_SPACING.XS
   },
   statValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#10b981',
-    marginBottom: 3,
-    textAlign: 'center',
+    fontSize: NUBANK_FONT_SIZES.SM,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    color: NUBANK_COLORS.PRIMARY,
+    marginBottom: 2,
+    textAlign: 'center'
   },
   statLabel: {
-    fontSize: 10,
-    color: '#6b7280',
+    fontSize: NUBANK_FONT_SIZES.XS,
+    color: NUBANK_COLORS.TEXT_SECONDARY,
     textAlign: 'center',
-    fontWeight: '600',
+    fontWeight: NUBANK_FONT_WEIGHTS.MEDIUM
   },
   lastUpdatedText: {
-    fontSize: 10,
-    color: '#9ca3af',
+    fontSize: NUBANK_FONT_SIZES.XS,
+    color: NUBANK_COLORS.TEXT_TERTIARY,
     textAlign: 'center',
-    marginTop: 8,
-    paddingHorizontal: 20,
+    marginTop: NUBANK_SPACING.SM,
+    paddingHorizontal: NUBANK_SPACING.LG
   },
 
   // Lista compacta
   list: {
-    padding: 12,
+    padding: NUBANK_SPACING.MD
   },
 
   // Grupo por data compacto
   groupContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: NUBANK_COLORS.CARD_BACKGROUND,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
+    marginBottom: NUBANK_SPACING.MD,
+    ...NUBANK_SHADOWS.SM
   },
   groupHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: NUBANK_SPACING.LG,
+    paddingHorizontal: NUBANK_SPACING.LG,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: NUBANK_COLORS.CARD_BORDER
   },
   groupHeaderCollapsed: {
-    borderBottomWidth: 0,
+    borderBottomWidth: 0
   },
   groupHeaderLeft: {
     flexDirection: 'row',
+    alignItems: 'center'
+  },
+  groupEmojiContainer: {
+    width: 36,
+    height: 36,
+    backgroundColor: `${NUBANK_COLORS.PRIMARY}10`,
+    borderRadius: 18,
+    justifyContent: 'center',
     alignItems: 'center',
+    marginRight: NUBANK_SPACING.MD
   },
   groupEmoji: {
-    fontSize: 20,
-    marginRight: 10,
+    fontSize: 18
   },
-  groupDateContainer: {
-    
-  },
+  groupDateContainer: {},
   groupDateMain: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1f2937',
+    fontSize: NUBANK_FONT_SIZES.MD,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    color: NUBANK_COLORS.TEXT_PRIMARY
   },
   groupDateSub: {
-    fontSize: 11,
-    color: '#6b7280',
+    fontSize: NUBANK_FONT_SIZES.XS,
+    color: NUBANK_COLORS.TEXT_SECONDARY
   },
   groupHeaderRight: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-end'
   },
   groupTotal: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#10b981',
-    marginBottom: 2,
+    fontSize: NUBANK_FONT_SIZES.MD,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    color: NUBANK_COLORS.PRIMARY,
+    marginBottom: 2
   },
   groupMetaContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'center'
   },
   groupCount: {
-    fontSize: 11,
-    color: '#6b7280',
-    marginRight: 8,
+    fontSize: NUBANK_FONT_SIZES.XS,
+    color: NUBANK_COLORS.TEXT_SECONDARY,
+    marginRight: NUBANK_SPACING.XS
   },
   expandIcon: {
-    fontSize: 12,
-    color: '#6b7280',
-    fontWeight: 'bold',
+    marginLeft: NUBANK_SPACING.XS
   },
 
   // Economia styles
   economyContainer: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-end'
   },
   economyIcon: {
-    fontSize: 16,
-    marginBottom: 2,
+    marginBottom: 2
   },
   economyText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#10b981',
+    fontSize: NUBANK_FONT_SIZES.MD,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    color: NUBANK_COLORS.SUCCESS
   },
   economyMessageContainer: {
-    backgroundColor: '#f0fdf4',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    backgroundColor: `${NUBANK_COLORS.SUCCESS}10`,
+    paddingVertical: NUBANK_SPACING.LG,
+    paddingHorizontal: NUBANK_SPACING.LG,
     borderTopWidth: 1,
-    borderTopColor: '#dcfce7',
+    borderTopColor: `${NUBANK_COLORS.SUCCESS}20`
   },
   economyMessage: {
-    fontSize: 14,
-    color: '#166534',
-    fontWeight: '600',
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.SUCCESS,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
     textAlign: 'center',
-    fontStyle: 'italic',
+    fontStyle: 'italic'
   },
 
   // Cards de despesas compactos
   expenseCard: {
-    backgroundColor: '#fff',
+    backgroundColor: NUBANK_COLORS.CARD_BACKGROUND,
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 56,
-    paddingLeft: 0,
+    minHeight: 64,
+    paddingLeft: 0
   },
   expenseContent: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: NUBANK_SPACING.SM,
+    paddingHorizontal: NUBANK_SPACING.LG,
     borderBottomWidth: 1,
-    borderBottomColor: '#f8f9fa',
+    borderBottomColor: NUBANK_COLORS.CARD_BORDER
   },
   expenseContentLast: {
-    borderBottomWidth: 0,
+    borderBottomWidth: 0
   },
   categoryIconContainer: {
-    width: 32,
-    height: 32,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    backgroundColor: `${NUBANK_COLORS.PRIMARY}10`,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: NUBANK_SPACING.MD,
+    borderWidth: 1,
+    borderColor: `${NUBANK_COLORS.PRIMARY}20`
   },
   categoryIcon: {
-    fontSize: 14,
+    fontSize: 16
   },
   expenseInfo: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'space-between'
   },
   expenseLeft: {
-    flex: 1,
+    flex: 1
   },
   expenseDescription: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 1,
+    fontSize: NUBANK_FONT_SIZES.SM,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    color: NUBANK_COLORS.TEXT_PRIMARY,
+    marginBottom: 2
   },
   expenseCategory: {
-    fontSize: 10,
-    color: '#6b7280',
-    flexWrap: 'wrap',
+    fontSize: NUBANK_FONT_SIZES.XS,
+    color: NUBANK_COLORS.TEXT_SECONDARY,
+    flexWrap: 'wrap'
   },
   expenseAmount: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#10b981',
-    marginLeft: 8,
+    fontSize: NUBANK_FONT_SIZES.SM,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    color: NUBANK_COLORS.PRIMARY,
+    marginLeft: NUBANK_SPACING.SM
   },
-  
+
   // Botão de delete compacto
   deleteButton: {
-    backgroundColor: '#fee2e2',
+    backgroundColor: `${NUBANK_COLORS.ERROR}10`,
     justifyContent: 'center',
     alignItems: 'center',
-    width: 44,
-    height: 56,
+    width: 48,
+    height: 64,
     borderBottomWidth: 1,
-    borderBottomColor: '#f8f9fa',
+    borderBottomColor: NUBANK_COLORS.CARD_BORDER
   },
   deleteButtonLast: {
-    borderBottomWidth: 0,
-  },
-  deleteText: {
-    fontSize: 14,
+    borderBottomWidth: 0
   },
 
   // Empty state
@@ -924,33 +1078,40 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
+    padding: NUBANK_SPACING.XXL
   },
   emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
+    marginBottom: NUBANK_SPACING.LG,
+    opacity: 0.4
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 8,
+    fontSize: NUBANK_FONT_SIZES.XL,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    color: NUBANK_COLORS.TEXT_PRIMARY,
+    marginBottom: NUBANK_SPACING.SM
   },
   emptySubtitle: {
-    fontSize: 16,
-    color: '#6b7280',
+    fontSize: NUBANK_FONT_SIZES.MD,
+    color: NUBANK_COLORS.TEXT_SECONDARY,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: NUBANK_SPACING.XL
   },
   debugButton: {
-    backgroundColor: '#f59e0b',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: NUBANK_COLORS.WARNING,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: NUBANK_SPACING.LG,
+    paddingVertical: NUBANK_SPACING.SM,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
+    ...NUBANK_SHADOWS.SM
+  },
+  debugButtonIcon: {
+    marginRight: NUBANK_SPACING.XS
   },
   debugButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
+    color: NUBANK_COLORS.TEXT_WHITE,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    fontSize: NUBANK_FONT_SIZES.SM
   },
 
   // Loading
@@ -958,13 +1119,56 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY
   },
   loadingText: {
-    marginTop: 12,
-    color: '#6b7280',
-    fontSize: 16,
+    marginTop: NUBANK_SPACING.MD,
+    color: NUBANK_COLORS.TEXT_SECONDARY,
+    fontSize: NUBANK_FONT_SIZES.MD,
+    fontWeight: NUBANK_FONT_WEIGHTS.MEDIUM
   },
+
+  // Error state
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: NUBANK_SPACING.XXL,
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY
+  },
+  errorIcon: {
+    marginBottom: NUBANK_SPACING.LG,
+    opacity: 0.6
+  },
+  errorTitle: {
+    fontSize: NUBANK_FONT_SIZES.XL,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    color: NUBANK_COLORS.ERROR,
+    marginBottom: NUBANK_SPACING.SM
+  },
+  errorMessage: {
+    fontSize: NUBANK_FONT_SIZES.MD,
+    color: NUBANK_COLORS.TEXT_SECONDARY,
+    textAlign: 'center',
+    marginBottom: NUBANK_SPACING.XL
+  },
+  retryButton: {
+    backgroundColor: NUBANK_COLORS.PRIMARY,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: NUBANK_SPACING.XL,
+    paddingVertical: NUBANK_SPACING.MD,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
+    ...NUBANK_SHADOWS.SM
+  },
+  retryButtonIcon: {
+    marginRight: NUBANK_SPACING.XS
+  },
+  retryButtonText: {
+    color: NUBANK_COLORS.TEXT_WHITE,
+    fontSize: NUBANK_FONT_SIZES.MD,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD
+  }
 });
 
 export default GroupedExpenseList;

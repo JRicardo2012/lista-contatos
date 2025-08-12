@@ -1,0 +1,19 @@
+# .prettierignore - Arquivos ignorados pelo Prettier
+
+# Dependências
+node_modules/
+*.log
+
+# Build e cache
+.expo/
+dist/
+build/
+.next/
+
+# Expo
+.expo-shared/
+
+# Configurações
+jest.config.js
+babel.config.js
+metro.config.js

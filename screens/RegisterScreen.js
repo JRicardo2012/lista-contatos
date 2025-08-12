@@ -1,4 +1,4 @@
-// screens/RegisterScreen.js - VERSÃO COM FONTES MAIORES
+// screens/RegisterScreen.js - DESIGN NUBANK
 import React, { useState } from 'react';
 import {
   View,
@@ -7,14 +7,28 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
-  SafeAreaView
+  ActivityIndicator,
+  StatusBar,
+  Animated
 } from 'react-native';
 import { useAuth } from '../services/AuthContext';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import {
+  NUBANK_COLORS,
+  NUBANK_SPACING,
+  NUBANK_FONT_SIZES,
+  NUBANK_BORDER_RADIUS,
+  NUBANK_SHADOWS,
+  NUBANK_FONT_WEIGHTS
+} from '../constants/nubank-theme';
 
 export default function RegisterScreen({ navigation }) {
   const { register } = useAuth();
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,9 +37,29 @@ export default function RegisterScreen({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // Animações
+  const fadeAnim = useState(new Animated.Value(0))[0];
+  const slideAnim = useState(new Animated.Value(50))[0];
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 20,
+        friction: 7,
+        useNativeDriver: true
+      })
+    ]).start();
+  }, []);
+
   const handleRegister = async () => {
     // Validações
-    if (!name || !email || !password || !confirmPassword) {
+    if (!name.trim() || !email.trim() || !password || !confirmPassword) {
       Alert.alert('Atenção', 'Por favor, preencha todos os campos');
       return;
     }
@@ -41,237 +75,331 @@ export default function RegisterScreen({ navigation }) {
     }
 
     setLoading(true);
-    const result = await register({ name, email, password });
+    const result = await register(name, email, password);
     setLoading(false);
 
-    if (!result.success) {
-      Alert.alert('Erro', result.error);
+    if (result.success) {
+      Alert.alert('Cadastro Realizado!', 'Sua conta foi criada com sucesso.', [
+        { text: 'Entendi' }
+      ]);
     } else {
-      Alert.alert(
-        'Sucesso!', 
-        'Conta criada com sucesso!',
-        [{ text: 'OK' }]
-      );
+      if (result.error?.includes('UNIQUE constraint failed')) {
+        Alert.alert('Erro', 'Este email já está cadastrado');
+      } else {
+        Alert.alert('Erro', result.error || 'Erro ao criar conta');
+      }
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+    <View style={styles.container}>
+      <StatusBar barStyle='light-content' backgroundColor={NUBANK_COLORS.PRIMARY} />
+
+      <LinearGradient
+        colors={[NUBANK_COLORS.PRIMARY, NUBANK_COLORS.PRIMARY_DARK]}
+        style={styles.gradient}
       >
-        {/* Header */}
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
         >
-          <Text style={styles.backIcon}>←</Text>
-        </TouchableOpacity>
-
-        {/* Título */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Criar Conta</Text>
-          <Text style={styles.subtitle}>Preencha os dados abaixo</Text>
-        </View>
-
-        {/* Formulário */}
-        <View style={styles.form}>
-          {/* Nome */}
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Nome completo"
-              placeholderTextColor="#9CA3AF"
-              value={name}
-              onChangeText={setName}
-              autoCapitalize="words"
-            />
-          </View>
-
-          {/* Email */}
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              placeholderTextColor="#9CA3AF"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          {/* Senha */}
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Senha (mínimo 6 caracteres)"
-              placeholderTextColor="#9CA3AF"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-            />
-            <TouchableOpacity 
-              style={styles.eyeButton}
-              onPress={() => setShowPassword(!showPassword)}
-            >
-              <Text style={styles.eyeIcon}>
-                {showPassword ? '👁️' : '👁️‍🗨️'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Confirmar Senha */}
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Confirmar senha"
-              placeholderTextColor="#9CA3AF"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry={!showConfirmPassword}
-            />
-            <TouchableOpacity 
-              style={styles.eyeButton}
-              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-            >
-              <Text style={styles.eyeIcon}>
-                {showConfirmPassword ? '👁️' : '👁️‍🗨️'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Botão Criar Conta */}
-          <TouchableOpacity 
-            style={[styles.registerButton, loading && styles.buttonDisabled]}
-            onPress={handleRegister}
-            disabled={loading}
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps='handled'
           >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.registerButtonText}>Criar Conta</Text>
-            )}
-          </TouchableOpacity>
+            <Animated.View
+              style={[
+                styles.content,
+                {
+                  opacity: fadeAnim,
+                  transform: [{ translateY: slideAnim }]
+                }
+              ]}
+            >
+              {/* Header com botão voltar */}
+              <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+                <MaterialCommunityIcons
+                  name='arrow-left'
+                  size={24}
+                  color={NUBANK_COLORS.TEXT_WHITE}
+                />
+              </TouchableOpacity>
 
-          {/* Termos */}
-          <Text style={styles.termsText}>
-            Ao criar uma conta, você concorda com nossos{'\n'}
-            <Text style={styles.termsLink}>Termos de Uso</Text> e{' '}
-            <Text style={styles.termsLink}>Política de Privacidade</Text>
-          </Text>
+              {/* Logo */}
+              <View style={styles.logoContainer}>
+                <View style={styles.logoCircle}>
+                  <MaterialCommunityIcons
+                    name='account-plus'
+                    size={48}
+                    color={NUBANK_COLORS.TEXT_WHITE}
+                  />
+                </View>
+                <Text style={styles.appName}>Criar conta</Text>
+              </View>
 
-          {/* Link para Login */}
-          <View style={styles.loginContainer}>
-            <Text style={styles.loginText}>Já tem uma conta?</Text>
-            <TouchableOpacity onPress={() => navigation.goBack()}>
-              <Text style={styles.loginLink}> Fazer login</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+              {/* Formulário */}
+              <View style={styles.formContainer}>
+                <Text style={styles.welcomeText}>Vamos começar</Text>
+                <Text style={styles.subtitleText}>Preencha os dados abaixo</Text>
+
+                {/* Nome */}
+                <View style={styles.inputContainer}>
+                  <MaterialCommunityIcons
+                    name='account-outline'
+                    size={20}
+                    color={NUBANK_COLORS.TEXT_TERTIARY}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder='Nome completo'
+                    placeholderTextColor={NUBANK_COLORS.TEXT_TERTIARY}
+                    value={name}
+                    onChangeText={setName}
+                    autoCapitalize='words'
+                    autoCorrect={false}
+                  />
+                </View>
+
+                {/* Email */}
+                <View style={styles.inputContainer}>
+                  <MaterialCommunityIcons
+                    name='email-outline'
+                    size={20}
+                    color={NUBANK_COLORS.TEXT_TERTIARY}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder='E-mail'
+                    placeholderTextColor={NUBANK_COLORS.TEXT_TERTIARY}
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType='email-address'
+                    autoCapitalize='none'
+                    autoCorrect={false}
+                  />
+                </View>
+
+                {/* Senha */}
+                <View style={styles.inputContainer}>
+                  <MaterialCommunityIcons
+                    name='lock-outline'
+                    size={20}
+                    color={NUBANK_COLORS.TEXT_TERTIARY}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder='Senha'
+                    placeholderTextColor={NUBANK_COLORS.TEXT_TERTIARY}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize='none'
+                    autoCorrect={false}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.eyeButton}
+                  >
+                    <MaterialCommunityIcons
+                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color={NUBANK_COLORS.TEXT_TERTIARY}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Confirmar Senha */}
+                <View style={styles.inputContainer}>
+                  <MaterialCommunityIcons
+                    name='lock-check-outline'
+                    size={20}
+                    color={NUBANK_COLORS.TEXT_TERTIARY}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder='Confirmar senha'
+                    placeholderTextColor={NUBANK_COLORS.TEXT_TERTIARY}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    secureTextEntry={!showConfirmPassword}
+                    autoCapitalize='none'
+                    autoCorrect={false}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                    style={styles.eyeButton}
+                  >
+                    <MaterialCommunityIcons
+                      name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color={NUBANK_COLORS.TEXT_TERTIARY}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.passwordHint}>A senha deve ter pelo menos 6 caracteres</Text>
+
+                <TouchableOpacity
+                  style={styles.registerButton}
+                  onPress={handleRegister}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color={NUBANK_COLORS.TEXT_WHITE} />
+                  ) : (
+                    <Text style={styles.registerButtonText}>Criar conta</Text>
+                  )}
+                </TouchableOpacity>
+
+                <View style={styles.footer}>
+                  <Text style={styles.footerText}>Já tem uma conta?</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                    <Text style={styles.loginLink}> Fazer login</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Animated.View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
+    flex: 1
+  },
+  gradient: {
+    flex: 1
+  },
+  keyboardView: {
+    flex: 1
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 40,
-    paddingVertical: 60,
+    justifyContent: 'center'
   },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: NUBANK_SPACING.LG
+  },
+
+  // Botão voltar
   backButton: {
-    marginBottom: 20,
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 30,
+    left: NUBANK_SPACING.LG,
+    zIndex: 1,
+    padding: NUBANK_SPACING.SM
   },
-  backIcon: {
-    fontSize: 32, // Aumentado de 28 para 32
-    color: '#1F2937',
-  },
-  header: {
+
+  // Logo
+  logoContainer: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: NUBANK_SPACING.XL,
+    marginTop: NUBANK_SPACING.XL
   },
-  title: {
-    fontSize: 32, // Aumentado de 28 para 32
-    fontWeight: '300',
-    color: '#1F2937',
-    marginBottom: 8,
-    letterSpacing: 1,
+  logoCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: `${NUBANK_COLORS.TEXT_WHITE}20`,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: NUBANK_SPACING.MD
   },
-  subtitle: {
-    fontSize: 18, // Aumentado de 16 para 18
-    color: '#6B7280',
+  appName: {
+    fontSize: NUBANK_FONT_SIZES.XXL,
+    fontWeight: NUBANK_FONT_WEIGHTS.BOLD,
+    color: NUBANK_COLORS.TEXT_WHITE,
+    textAlign: 'center'
   },
-  form: {
-    width: '100%',
+
+  // Formulário
+  formContainer: {
+    backgroundColor: NUBANK_COLORS.BACKGROUND,
+    borderRadius: NUBANK_BORDER_RADIUS.XL,
+    padding: NUBANK_SPACING.XL,
+    ...NUBANK_SHADOWS.LG
   },
+  welcomeText: {
+    fontSize: NUBANK_FONT_SIZES.XL,
+    fontWeight: NUBANK_FONT_WEIGHTS.BOLD,
+    color: NUBANK_COLORS.TEXT_PRIMARY,
+    marginBottom: NUBANK_SPACING.XS
+  },
+  subtitleText: {
+    fontSize: NUBANK_FONT_SIZES.MD,
+    color: NUBANK_COLORS.TEXT_SECONDARY,
+    marginBottom: NUBANK_SPACING.XL
+  },
+
+  // Inputs
   inputContainer: {
-    marginBottom: 20,
-    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
+    marginBottom: NUBANK_SPACING.MD,
+    paddingHorizontal: NUBANK_SPACING.MD,
+    height: 56
+  },
+  inputIcon: {
+    marginRight: NUBANK_SPACING.SM
   },
   input: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    paddingVertical: 14, // Aumentado de 12 para 14
-    paddingRight: 40,
-    fontSize: 18, // Aumentado de 16 para 18
-    color: '#1F2937',
+    flex: 1,
+    fontSize: NUBANK_FONT_SIZES.MD,
+    color: NUBANK_COLORS.TEXT_PRIMARY,
+    height: '100%'
   },
   eyeButton: {
-    position: 'absolute',
-    right: 0,
-    top: 12, // Ajustado de 10 para 12
-    padding: 8,
+    padding: NUBANK_SPACING.SM
   },
-  eyeIcon: {
-    fontSize: 24, // Aumentado de 20 para 24
-    opacity: 0.6,
+
+  // Dica de senha
+  passwordHint: {
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.TEXT_SECONDARY,
+    marginBottom: NUBANK_SPACING.LG,
+    textAlign: 'center'
   },
+
+  // Botão
   registerButton: {
-    backgroundColor: '#6366F1',
-    paddingVertical: 18, // Aumentado de 16 para 18
-    borderRadius: 8,
+    backgroundColor: NUBANK_COLORS.PRIMARY,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
+    height: 56,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 32,
-    marginBottom: 24,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
+    marginBottom: NUBANK_SPACING.XL
   },
   registerButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18, // Aumentado de 16 para 18
-    fontWeight: '600',
-    letterSpacing: 1,
+    fontSize: NUBANK_FONT_SIZES.MD,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    color: NUBANK_COLORS.TEXT_WHITE
   },
-  termsText: {
-    fontSize: 14, // Aumentado de 12 para 14
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 20, // Aumentado de 18 para 20
-    marginBottom: 32,
-  },
-  termsLink: {
-    color: '#6366F1',
-    textDecorationLine: 'underline',
-  },
-  loginContainer: {
+
+  // Footer
+  footer: {
     flexDirection: 'row',
     justifyContent: 'center',
+    alignItems: 'center'
   },
-  loginText: {
-    color: '#6B7280',
-    fontSize: 16, // Aumentado de 14 para 16
+  footerText: {
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.TEXT_SECONDARY
   },
   loginLink: {
-    color: '#6366F1',
-    fontSize: 16, // Aumentado de 14 para 16
-    fontWeight: '600',
-  },
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.PRIMARY,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD
+  }
 });

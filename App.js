@@ -4,6 +4,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SQLiteProvider } from 'expo-sqlite';
 import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
+import MemoryMonitor from './utils/MemoryMonitor';
+import eventEmitter from './services/EventEmitter';
 
 // Componentes existentes
 import DatabaseInitializer from './components/DatabaseInitializer';
@@ -20,15 +22,15 @@ const Stack = createNativeStackNavigator();
 // Navegador de Autenticação
 function AuthNavigator() {
   return (
-    <Stack.Navigator 
-      initialRouteName="Login"
-      screenOptions={{ 
+    <Stack.Navigator
+      initialRouteName='Login'
+      screenOptions={{
         headerShown: false,
         animation: 'slide_from_right'
       }}
     >
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Register" component={RegisterScreen} />
+      <Stack.Screen name='Login' component={LoginScreen} />
+      <Stack.Screen name='Register' component={RegisterScreen} />
     </Stack.Navigator>
   );
 }
@@ -40,7 +42,7 @@ function AppNavigator() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6366F1" />
+        <ActivityIndicator size='large' color='#6366F1' />
         <Text style={styles.loadingText}>Carregando...</Text>
       </View>
     );
@@ -52,6 +54,19 @@ function AppNavigator() {
 // App principal com Splash Screen
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
+
+  useEffect(() => {
+    // Inicia monitoramento
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      MemoryMonitor.start();
+    }
+
+    // Limpeza ao desmontar
+    return () => {
+      MemoryMonitor.stop();
+      eventEmitter.removeAllListeners();
+    };
+  }, []);
 
   useEffect(() => {
     // Mostra a splash screen por 3 segundos
@@ -69,7 +84,7 @@ export default function App() {
 
   // Mostra o app principal
   return (
-    <SQLiteProvider databaseName="expenseManager.db">
+    <SQLiteProvider databaseName='expenseManager.db'>
       <NavigationContainer>
         <DatabaseInitializer>
           <AuthProvider>
@@ -86,11 +101,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F9FAFB'
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#6B7280',
-  },
+    color: '#6B7280'
+  }
 });

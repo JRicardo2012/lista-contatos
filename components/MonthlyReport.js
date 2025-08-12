@@ -1,13 +1,4 @@
-// components/MonthlyReport.js
-// RELATÓRIO MENSAL COM EXPORTAÇÃO
-// Funcionalidades:
-// - Seleção de mês/ano
-// - Estatísticas detalhadas do mês
-// - Gráficos interativos
-// - Lista completa de despesas
-// - Comparação com meses anteriores
-// - Exportação/compartilhamento do relatório
-
+// components/MonthlyReport.js - VERSÃO CORRIGIDA COM USER_ID
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
@@ -26,11 +17,13 @@ import {
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { PieChart, LineChart } from 'react-native-chart-kit';
+import { useAuth } from '../services/AuthContext'; // IMPORTANTE: Adicionar
 
 const { width: screenWidth } = Dimensions.get('window');
 
 export default function MonthlyReport() {
   const db = useSQLiteContext();
+  const { user } = useAuth(); // IMPORTANTE: Pegar usuário logado
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [monthModalVisible, setMonthModalVisible] = useState(false);
@@ -54,39 +47,60 @@ export default function MonthlyReport() {
     establishmentsRanking: []
   });
 
-  // Meses em português
   const monthNames = [
-    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    'Janeiro',
+    'Fevereiro',
+    'Março',
+    'Abril',
+    'Maio',
+    'Junho',
+    'Julho',
+    'Agosto',
+    'Setembro',
+    'Outubro',
+    'Novembro',
+    'Dezembro'
   ];
 
   useEffect(() => {
-    if (db) {
+    if (db && user) {
       loadMonthData();
     }
-  }, [db, selectedMonth, selectedYear]);
+  }, [db, user, selectedMonth, selectedYear]);
 
-  const loadMonthData = useCallback(async (isRefresh = false) => {
-    try {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
+  const loadMonthData = useCallback(
+    async (isRefresh = false) => {
+      if (!user) {
+        console.error('Usuário não definido');
+        return;
       }
 
-      // 1. Estatísticas gerais do mês
-      const monthStats = await db.getFirstAsync(`
+      try {
+        if (isRefresh) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
+        }
+
+        const monthKey = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
+
+        // 1. Estatísticas gerais do mês - COM USER_ID
+        const monthStats = await db.getFirstAsync(
+          `
         SELECT 
           COUNT(*) as totalTransactions,
           COALESCE(SUM(CAST(amount AS REAL)), 0) as totalAmount,
           COALESCE(AVG(CAST(amount AS REAL)), 0) as averagePerTransaction,
           COALESCE(MAX(CAST(amount AS REAL)), 0) as maxExpense
         FROM expenses 
-        WHERE strftime('%Y-%m', date) = ?
-      `, [`${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`]);
+        WHERE strftime('%Y-%m', date) = ? AND user_id = ?
+      `,
+          [monthKey, user.id]
+        );
 
-      // 2. Distribuição por categoria
-      const categoryData = await db.getAllAsync(`
+        // 2. Distribuição por categoria - COM USER_ID
+        const categoryData = await db.getAllAsync(
+          `
         SELECT 
           COALESCE(c.name, 'Sem categoria') as category,
           COALESCE(c.icon, '📦') as icon,
@@ -95,25 +109,31 @@ export default function MonthlyReport() {
           AVG(CAST(e.amount AS REAL)) as average
         FROM expenses e
         LEFT JOIN categories c ON e.categoryId = c.id
-        WHERE strftime('%Y-%m', e.date) = ?
+        WHERE strftime('%Y-%m', e.date) = ? AND e.user_id = ?
         GROUP BY c.id, c.name, c.icon
         ORDER BY total DESC
-      `, [`${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`]);
+      `,
+          [monthKey, user.id]
+        );
 
-      // 3. Gastos diários
-      const dailyData = await db.getAllAsync(`
+        // 3. Gastos diários - COM USER_ID
+        const dailyData = await db.getAllAsync(
+          `
         SELECT 
           strftime('%d', date) as day,
           SUM(CAST(amount AS REAL)) as total,
           COUNT(*) as count
         FROM expenses 
-        WHERE strftime('%Y-%m', date) = ?
+        WHERE strftime('%Y-%m', date) = ? AND user_id = ?
         GROUP BY strftime('%d', date)
         ORDER BY day
-      `, [`${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`]);
+      `,
+          [monthKey, user.id]
+        );
 
-      // 4. Lista completa de despesas
-      const expensesList = await db.getAllAsync(`
+        // 4. Lista completa de despesas - COM USER_ID
+        const expensesList = await db.getAllAsync(
+          `
         SELECT 
           e.id,
           e.description,
@@ -128,35 +148,46 @@ export default function MonthlyReport() {
         LEFT JOIN categories c ON e.categoryId = c.id
         LEFT JOIN payment_methods pm ON e.payment_method_id = pm.id
         LEFT JOIN establishments est ON e.establishment_id = est.id
-        WHERE strftime('%Y-%m', e.date) = ?
+        WHERE strftime('%Y-%m', e.date) = ? AND e.user_id = ?
         ORDER BY e.date DESC
-      `, [`${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`]);
+      `,
+          [monthKey, user.id]
+        );
 
-      // 5. Maior despesa do mês
-      const biggestExpense = expensesList.length > 0 
-        ? expensesList.reduce((max, current) => 
-            current.amount > max.amount ? current : max, expensesList[0])
-        : null;
+        // 5. Maior despesa do mês
+        const biggestExpense =
+          expensesList.length > 0
+            ? expensesList.reduce(
+                (max, current) => (current.amount > max.amount ? current : max),
+                expensesList[0]
+              )
+            : null;
 
-      // 6. Comparação com mês anterior
-      const previousMonth = selectedMonth === 0 ? 11 : selectedMonth - 1;
-      const previousYear = selectedMonth === 0 ? selectedYear - 1 : selectedYear;
-      
-      const previousMonthData = await db.getFirstAsync(`
+        // 6. Comparação com mês anterior - COM USER_ID
+        const previousMonth = selectedMonth === 0 ? 11 : selectedMonth - 1;
+        const previousYear = selectedMonth === 0 ? selectedYear - 1 : selectedYear;
+        const previousMonthKey = `${previousYear}-${String(previousMonth + 1).padStart(2, '0')}`;
+
+        const previousMonthData = await db.getFirstAsync(
+          `
         SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total
         FROM expenses 
-        WHERE strftime('%Y-%m', date) = ?
-      `, [`${previousYear}-${String(previousMonth + 1).padStart(2, '0')}`]);
+        WHERE strftime('%Y-%m', date) = ? AND user_id = ?
+      `,
+          [previousMonthKey, user.id]
+        );
 
-      const comparison = {
-        previousMonth: previousMonthData?.total || 0,
-        percentChange: previousMonthData?.total > 0 
-          ? ((monthStats.totalAmount - previousMonthData.total) / previousMonthData.total) * 100
-          : 0
-      };
+        const comparison = {
+          previousMonth: previousMonthData?.total || 0,
+          percentChange:
+            previousMonthData?.total > 0
+              ? ((monthStats.totalAmount - previousMonthData.total) / previousMonthData.total) * 100
+              : 0
+        };
 
-      // 7. Distribuição por método de pagamento
-      const paymentMethodsData = await db.getAllAsync(`
+        // 7. Distribuição por método de pagamento - COM USER_ID
+        const paymentMethodsData = await db.getAllAsync(
+          `
         SELECT 
           COALESCE(pm.name, 'Não especificado') as method,
           COALESCE(pm.icon, '💳') as icon,
@@ -164,13 +195,16 @@ export default function MonthlyReport() {
           COUNT(*) as count
         FROM expenses e
         LEFT JOIN payment_methods pm ON e.payment_method_id = pm.id
-        WHERE strftime('%Y-%m', e.date) = ?
+        WHERE strftime('%Y-%m', e.date) = ? AND e.user_id = ?
         GROUP BY pm.id, pm.name, pm.icon
         ORDER BY total DESC
-      `, [`${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`]);
+      `,
+          [monthKey, user.id]
+        );
 
-      // 8. Ranking de estabelecimentos
-      const establishmentsData = await db.getAllAsync(`
+        // 8. Ranking de estabelecimentos - COM USER_ID
+        const establishmentsData = await db.getAllAsync(
+          `
         SELECT 
           COALESCE(est.name, 'Não especificado') as name,
           COUNT(*) as visits,
@@ -178,52 +212,53 @@ export default function MonthlyReport() {
           AVG(CAST(e.amount AS REAL)) as average
         FROM expenses e
         LEFT JOIN establishments est ON e.establishment_id = est.id
-        WHERE strftime('%Y-%m', e.date) = ? AND est.id IS NOT NULL
+        WHERE strftime('%Y-%m', e.date) = ? AND e.user_id = ? AND est.id IS NOT NULL
         GROUP BY est.id, est.name
         ORDER BY total DESC
         LIMIT 10
-      `, [`${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`]);
+      `,
+          [monthKey, user.id]
+        );
 
-      // Processar dados
-      const processedData = {
-        totalAmount: monthStats?.totalAmount || 0,
-        totalTransactions: monthStats?.totalTransactions || 0,
-        averagePerTransaction: monthStats?.averagePerTransaction || 0,
-        categoryDistribution: categoryData.map((item, index) => ({
-          ...item,
-          color: getColorForIndex(index),
-          percentage: monthStats.totalAmount > 0 
-            ? (item.total / monthStats.totalAmount) * 100 
-            : 0
-        })),
-        dailyExpenses: processDailyData(dailyData),
-        expensesList,
-        topCategory: categoryData[0] || null,
-        biggestExpense,
-        comparison,
-        paymentMethodsDistribution: paymentMethodsData,
-        establishmentsRanking: establishmentsData
-      };
+        // Processar dados
+        const processedData = {
+          totalAmount: monthStats?.totalAmount || 0,
+          totalTransactions: monthStats?.totalTransactions || 0,
+          averagePerTransaction: monthStats?.averagePerTransaction || 0,
+          categoryDistribution: categoryData.map((item, index) => ({
+            ...item,
+            color: getColorForIndex(index),
+            percentage: monthStats.totalAmount > 0 ? (item.total / monthStats.totalAmount) * 100 : 0
+          })),
+          dailyExpenses: processDailyData(dailyData),
+          expensesList,
+          topCategory: categoryData[0] || null,
+          biggestExpense,
+          comparison,
+          paymentMethodsDistribution: paymentMethodsData,
+          establishmentsRanking: establishmentsData
+        };
 
-      setMonthData(processedData);
+        setMonthData(processedData);
+      } catch (error) {
+        console.error('❌ Erro ao carregar dados do mês:', error);
+        Alert.alert('Erro', 'Não foi possível carregar os dados do mês.');
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [db, user, selectedMonth, selectedYear]
+  );
 
-    } catch (error) {
-      console.error('❌ Erro ao carregar dados do mês:', error);
-      Alert.alert('Erro', 'Não foi possível carregar os dados do mês.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [db, selectedMonth, selectedYear]);
-
-  const processDailyData = (dailyData) => {
+  const processDailyData = dailyData => {
     const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
     const processedData = [];
 
     for (let i = 1; i <= daysInMonth; i++) {
       const dayStr = String(i).padStart(2, '0');
       const dayData = dailyData.find(d => d.day === dayStr);
-      
+
       processedData.push({
         day: i,
         total: dayData ? dayData.total : 0,
@@ -234,18 +269,18 @@ export default function MonthlyReport() {
     return processedData;
   };
 
-  const formatCurrency = (value) => {
+  const formatCurrency = value => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL'
     }).format(value || 0);
   };
 
-  const formatPercentage = (value) => {
+  const formatPercentage = value => {
     return `${Math.abs(value).toFixed(1)}%`;
   };
 
-  const formatDate = (dateString) => {
+  const formatDate = dateString => {
     try {
       const date = new Date(dateString);
       return date.toLocaleDateString('pt-BR', {
@@ -258,24 +293,32 @@ export default function MonthlyReport() {
     }
   };
 
-  const getColorForIndex = (index) => {
-    const colors = ['#10B981', '#3B82F6', '#EF4444', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
+  const getColorForIndex = index => {
+    const colors = [
+      '#10B981',
+      '#3B82F6',
+      '#EF4444',
+      '#F59E0B',
+      '#8B5CF6',
+      '#EC4899',
+      '#14B8A6',
+      '#F97316'
+    ];
     return colors[index % colors.length];
   };
 
-  // Compartilha relatório como texto
   const shareReport = async () => {
     try {
       const monthName = monthNames[selectedMonth];
       const { totalAmount, totalTransactions, categoryDistribution } = monthData;
-      
+
       let message = `📊 RELATÓRIO DE DESPESAS\n`;
       message += `${monthName} de ${selectedYear}\n\n`;
       message += `💰 Total: ${formatCurrency(totalAmount)}\n`;
       message += `📝 Transações: ${totalTransactions}\n`;
       message += `📊 Média: ${formatCurrency(totalAmount / totalTransactions)}\n\n`;
       message += `POR CATEGORIA:\n`;
-      
+
       categoryDistribution.slice(0, 5).forEach(cat => {
         message += `${cat.icon} ${cat.category}: ${formatCurrency(cat.total)} (${cat.percentage.toFixed(1)}%)\n`;
       });
@@ -293,7 +336,6 @@ export default function MonthlyReport() {
     loadMonthData(true);
   }, [loadMonthData]);
 
-  // Dados para gráficos
   const pieChartData = useMemo(() => {
     return monthData.categoryDistribution.slice(0, 5).map(cat => ({
       name: cat.category,
@@ -306,7 +348,7 @@ export default function MonthlyReport() {
 
   const lineChartData = useMemo(() => {
     const days = monthData.dailyExpenses.filter(d => d.total > 0);
-    
+
     if (days.length === 0) {
       return {
         labels: ['Sem dados'],
@@ -316,11 +358,13 @@ export default function MonthlyReport() {
 
     return {
       labels: days.map(d => d.day.toString()),
-      datasets: [{
-        data: days.map(d => d.total),
-        color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
-        strokeWidth: 2
-      }]
+      datasets: [
+        {
+          data: days.map(d => d.total),
+          color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
+          strokeWidth: 2
+        }
+      ]
     };
   }, [monthData.dailyExpenses]);
 
@@ -334,7 +378,6 @@ export default function MonthlyReport() {
     decimalPlaces: 0
   };
 
-  // Renderiza item de despesa
   const renderExpenseItem = ({ item }) => (
     <View style={styles.expenseItem}>
       <View style={styles.expenseIcon}>
@@ -353,15 +396,14 @@ export default function MonthlyReport() {
     </View>
   );
 
-  // Modal de seleção de mês
   const MonthYearPicker = () => {
     const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).reverse();
-    
+
     return (
       <Modal
         visible={monthModalVisible}
         transparent={true}
-        animationType="slide"
+        animationType='slide'
         onRequestClose={() => setMonthModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
@@ -372,7 +414,7 @@ export default function MonthlyReport() {
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
             </View>
-            
+
             <ScrollView style={styles.modalBody}>
               {years.map(year => (
                 <View key={year}>
@@ -380,9 +422,10 @@ export default function MonthlyReport() {
                   <View style={styles.monthGrid}>
                     {monthNames.map((month, index) => {
                       const isSelected = selectedYear === year && selectedMonth === index;
-                      const isFuture = year > new Date().getFullYear() || 
+                      const isFuture =
+                        year > new Date().getFullYear() ||
                         (year === new Date().getFullYear() && index > new Date().getMonth());
-                      
+
                       return (
                         <TouchableOpacity
                           key={index}
@@ -400,11 +443,13 @@ export default function MonthlyReport() {
                           }}
                           disabled={isFuture}
                         >
-                          <Text style={[
-                            styles.monthItemText,
-                            isSelected && styles.monthItemTextSelected,
-                            isFuture && styles.monthItemTextDisabled
-                          ]}>
+                          <Text
+                            style={[
+                              styles.monthItemText,
+                              isSelected && styles.monthItemTextSelected,
+                              isFuture && styles.monthItemTextDisabled
+                            ]}
+                          >
                             {month.substring(0, 3)}
                           </Text>
                         </TouchableOpacity>
@@ -423,26 +468,30 @@ export default function MonthlyReport() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6366F1" />
+        <ActivityIndicator size='large' color='#6366F1' />
         <Text style={styles.loadingText}>Carregando relatório...</Text>
+      </View>
+    );
+  }
+
+  if (!user) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.errorText}>Faça login para ver seus relatórios</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.monthSelector}
-          onPress={() => setMonthModalVisible(true)}
-        >
+        <TouchableOpacity style={styles.monthSelector} onPress={() => setMonthModalVisible(true)}>
           <Text style={styles.monthSelectorText}>
             {monthNames[selectedMonth]} {selectedYear}
           </Text>
           <Text style={styles.monthSelectorIcon}>▼</Text>
         </TouchableOpacity>
-        
+
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.actionButton} onPress={shareReport}>
             <Text style={styles.actionIcon}>📤</Text>
@@ -450,18 +499,13 @@ export default function MonthlyReport() {
         </View>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={['#6366F1']}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#6366F1']} />
         }
       >
-        {/* Resumo Principal */}
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>Resumo do Mês</Text>
           <View style={styles.summaryGrid}>
@@ -475,18 +519,17 @@ export default function MonthlyReport() {
               <Text style={styles.summaryLabel}>Transações</Text>
             </View>
           </View>
-          
+
           {monthData.comparison.previousMonth > 0 && (
             <View style={styles.comparisonContainer}>
               <Text style={styles.comparisonText}>
-                {monthData.comparison.percentChange > 0 ? '📈' : '📉'} 
-                {' '}{formatPercentage(monthData.comparison.percentChange)} vs mês anterior
+                {monthData.comparison.percentChange > 0 ? '📈' : '📉'}{' '}
+                {formatPercentage(monthData.comparison.percentChange)} vs mês anterior
               </Text>
             </View>
           )}
         </View>
 
-        {/* Gráfico de Pizza - Categorias */}
         {pieChartData.length > 0 && (
           <View style={styles.chartSection}>
             <Text style={styles.sectionTitle}>📊 Distribuição por Categoria</Text>
@@ -496,15 +539,14 @@ export default function MonthlyReport() {
                 width={screenWidth - 40}
                 height={200}
                 chartConfig={chartConfig}
-                accessor="population"
-                backgroundColor="transparent"
-                paddingLeft="15"
+                accessor='population'
+                backgroundColor='transparent'
+                paddingLeft='15'
               />
             </View>
           </View>
         )}
 
-        {/* Top 5 Categorias */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🏆 Top Categorias</Text>
           {monthData.categoryDistribution.slice(0, 5).map((cat, index) => (
@@ -521,7 +563,6 @@ export default function MonthlyReport() {
           ))}
         </View>
 
-        {/* Métodos de Pagamento */}
         {monthData.paymentMethodsDistribution.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>💳 Formas de Pagamento</Text>
@@ -535,7 +576,6 @@ export default function MonthlyReport() {
           </View>
         )}
 
-        {/* Lista de Despesas */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>📋 Todas as Despesas</Text>
@@ -545,11 +585,11 @@ export default function MonthlyReport() {
               </Text>
             </TouchableOpacity>
           </View>
-          
+
           {showDetailedList && (
             <FlatList
               data={monthData.expensesList}
-              keyExtractor={(item) => item.id.toString()}
+              keyExtractor={item => item.id.toString()}
               renderItem={renderExpenseItem}
               scrollEnabled={false}
             />
@@ -567,10 +607,9 @@ export default function MonthlyReport() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F9FAFB'
   },
-  
-  // Header
+
   header: {
     backgroundColor: '#6366F1',
     flexDirection: 'row',
@@ -578,7 +617,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'ios' ? 50 : 30,
-    paddingBottom: 20,
+    paddingBottom: 20
   },
   monthSelector: {
     flexDirection: 'row',
@@ -586,21 +625,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 8
   },
   monthSelectorText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-    marginRight: 8,
+    marginRight: 8
   },
   monthSelectorIcon: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 12
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 12
   },
   actionButton: {
     width: 40,
@@ -608,18 +647,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 20,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
   actionIcon: {
-    fontSize: 20,
+    fontSize: 20
   },
 
-  // Content
   content: {
-    flex: 1,
+    flex: 1
   },
-  
-  // Summary Card
+
   summaryCard: {
     backgroundColor: '#FFFFFF',
     margin: 20,
@@ -629,76 +666,74 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 4
   },
   summaryTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#1F2937',
-    marginBottom: 16,
+    marginBottom: 16
   },
   summaryGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'center'
   },
   summaryItem: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: 'center'
   },
   summaryValue: {
     fontSize: 24,
     fontWeight: '700',
     color: '#10B981',
-    marginBottom: 4,
+    marginBottom: 4
   },
   summaryLabel: {
     fontSize: 14,
-    color: '#6B7280',
+    color: '#6B7280'
   },
   summaryDivider: {
     width: 1,
     height: 40,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#E5E7EB'
   },
   comparisonContainer: {
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: '#F3F4F6'
   },
   comparisonText: {
     fontSize: 14,
     color: '#6B7280',
-    textAlign: 'center',
+    textAlign: 'center'
   },
 
-  // Sections
   section: {
     marginHorizontal: 20,
-    marginBottom: 24,
+    marginBottom: 24
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 12
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#1F2937',
-    marginBottom: 12,
+    marginBottom: 12
   },
   toggleButton: {
     color: '#6366F1',
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '500'
   },
 
-  // Chart
   chartSection: {
     marginHorizontal: 20,
-    marginBottom: 24,
+    marginBottom: 24
   },
   chartCard: {
     backgroundColor: '#FFFFFF',
@@ -709,10 +744,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 4
   },
 
-  // Category Items
   categoryItem: {
     backgroundColor: '#FFFFFF',
     flexDirection: 'row',
@@ -725,67 +759,65 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 2
   },
   categoryInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    flex: 1
   },
   categoryIcon: {
     fontSize: 20,
-    marginRight: 12,
+    marginRight: 12
   },
   categoryName: {
     fontSize: 16,
     color: '#374151',
-    flex: 1,
+    flex: 1
   },
   categoryStats: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-end'
   },
   categoryAmount: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#1F2937'
   },
   categoryPercentage: {
     fontSize: 12,
-    color: '#6B7280',
+    color: '#6B7280'
   },
 
-  // Payment Methods
   paymentItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     padding: 12,
     borderRadius: 8,
-    marginBottom: 8,
+    marginBottom: 8
   },
   paymentIcon: {
     fontSize: 20,
-    marginRight: 12,
+    marginRight: 12
   },
   paymentName: {
     flex: 1,
     fontSize: 14,
-    color: '#374151',
+    color: '#374151'
   },
   paymentAmount: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#1F2937'
   },
 
-  // Expense Items
   expenseItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     padding: 12,
     borderRadius: 8,
-    marginBottom: 8,
+    marginBottom: 8
   },
   expenseIcon: {
     width: 36,
@@ -794,38 +826,37 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 12
   },
   expenseDetails: {
-    flex: 1,
+    flex: 1
   },
   expenseDescription: {
     fontSize: 14,
     fontWeight: '500',
     color: '#1F2937',
-    marginBottom: 2,
+    marginBottom: 2
   },
   expenseMeta: {
     fontSize: 12,
-    color: '#6B7280',
+    color: '#6B7280'
   },
   expenseAmount: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#059669',
+    color: '#059669'
   },
 
-  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-end'
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '80%',
+    maxHeight: '80%'
   },
   modalHeader: {
     flexDirection: 'row',
@@ -833,68 +864,71 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#E5E7EB'
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#1F2937'
   },
   closeButton: {
     fontSize: 20,
-    color: '#6B7280',
+    color: '#6B7280'
   },
   modalBody: {
-    padding: 20,
+    padding: 20
   },
   yearHeader: {
     fontSize: 18,
     fontWeight: '600',
     color: '#374151',
     marginBottom: 12,
-    marginTop: 8,
+    marginTop: 8
   },
   monthGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 16,
+    marginBottom: 16
   },
   monthItem: {
     width: '25%',
     paddingVertical: 12,
-    alignItems: 'center',
+    alignItems: 'center'
   },
   monthItemSelected: {
     backgroundColor: '#EEF2FF',
-    borderRadius: 8,
+    borderRadius: 8
   },
   monthItemDisabled: {
-    opacity: 0.3,
+    opacity: 0.3
   },
   monthItemText: {
     fontSize: 14,
-    color: '#374151',
+    color: '#374151'
   },
   monthItemTextSelected: {
     color: '#6366F1',
-    fontWeight: '600',
+    fontWeight: '600'
   },
   monthItemTextDisabled: {
-    color: '#9CA3AF',
+    color: '#9CA3AF'
   },
 
-  // Others
   bottomSpacer: {
-    height: 40,
+    height: 40
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#6B7280',
+    color: '#6B7280'
   },
+  errorText: {
+    fontSize: 16,
+    color: '#EF4444'
+  }
 });

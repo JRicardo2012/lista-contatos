@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -11,21 +11,27 @@ import {
   Modal,
   FlatList,
   Platform
-} from "react-native";
-import { useSQLiteContext } from "expo-sqlite";
-import { validators, sanitizers } from "../utils/validationUtils";
-import ExpenseCategoryList from "./ExpenseCategoryList";
-import ExpenseEstablishmentList from "./ExpenseEstablishmentList";
-import ExpensePaymentMethodList from "./ExpensePaymentMethodList";
+} from 'react-native';
+import { useSQLiteContext } from 'expo-sqlite';
+import { validators, sanitizers } from '../utils/validationUtils';
+import ExpenseCategoryList from './ExpenseCategoryList';
+import ExpenseEstablishmentList from './ExpenseEstablishmentList';
+import ExpensePaymentMethodList from './ExpensePaymentMethodList';
 
 export default function ExpenseForm({ expense, onSaved }) {
   const db = useSQLiteContext();
-  const [amount, setAmount] = useState(expense?.amount?.toString() || "");
-  const [description, setDescription] = useState(expense?.description || "");
+  const [amount, setAmount] = useState(expense?.amount?.toString() || '');
+  const [description, setDescription] = useState(expense?.description || '');
   const [selectedCategory, setSelectedCategory] = useState(expense?.categoryId || null);
-  const [selectedEstablishment, setSelectedEstablishment] = useState(expense?.establishment_id || null);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(expense?.payment_method_id || null);
-  const [selectedDate, setSelectedDate] = useState(expense?.date ? new Date(expense.date) : new Date());
+  const [selectedEstablishment, setSelectedEstablishment] = useState(
+    expense?.establishment_id || null
+  );
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(
+    expense?.payment_method_id || null
+  );
+  const [selectedDate, setSelectedDate] = useState(
+    expense?.date ? new Date(expense.date) : new Date()
+  );
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
@@ -41,17 +47,17 @@ export default function ExpenseForm({ expense, onSaved }) {
 
   useEffect(() => {
     const newErrors = {};
-    
+
     if (description.trim()) {
       const descError = validators.description(description);
       if (descError) newErrors.description = descError;
     }
-    
+
     if (amount.trim()) {
       const amountError = validators.amount(amount);
       if (amountError) newErrors.amount = amountError;
     }
-    
+
     setErrors(newErrors);
   }, [description, amount]);
 
@@ -79,8 +85,8 @@ export default function ExpenseForm({ expense, onSaved }) {
   }
 
   const openNewExpenseModal = () => {
-    setAmount("");
-    setDescription("");
+    setAmount('');
+    setDescription('');
     setSelectedCategory(null);
     setSelectedEstablishment(null);
     setSelectedPaymentMethod(null);
@@ -118,15 +124,15 @@ export default function ExpenseForm({ expense, onSaved }) {
   async function handleSave() {
     const descError = validators.description(description);
     const amountError = validators.amount(amount);
-    
+
     if (descError || amountError || !selectedCategory) {
       const newErrors = {};
       if (descError) newErrors.description = descError;
       if (amountError) newErrors.amount = amountError;
       setErrors(newErrors);
-      
+
       if (!selectedCategory) {
-        Alert.alert("Validação", "Selecione uma categoria.");
+        Alert.alert('Validação', 'Selecione uma categoria.');
       }
       return;
     }
@@ -144,26 +150,40 @@ export default function ExpenseForm({ expense, onSaved }) {
           `UPDATE expenses 
            SET amount = ?, description = ?, categoryId = ?, establishment_id = ?, payment_method_id = ?, date = ?
            WHERE id = ?`,
-          [valor, cleanDescription, selectedCategory, selectedEstablishment, selectedPaymentMethod, dateISO, expense.id]
+          [
+            valor,
+            cleanDescription,
+            selectedCategory,
+            selectedEstablishment,
+            selectedPaymentMethod,
+            dateISO,
+            expense.id
+          ]
         );
       } else {
         await db.runAsync(
           `INSERT INTO expenses (amount, description, categoryId, establishment_id, payment_method_id, date)
            VALUES (?, ?, ?, ?, ?, ?)`,
-          [valor, cleanDescription, selectedCategory, selectedEstablishment, selectedPaymentMethod, dateISO]
+          [
+            valor,
+            cleanDescription,
+            selectedCategory,
+            selectedEstablishment,
+            selectedPaymentMethod,
+            dateISO
+          ]
         );
       }
 
       setModalVisible(false);
       await loadRecentExpenses();
       notifyExpenseChange();
-      
-      Alert.alert("Sucesso", expense?.id ? "Despesa atualizada!" : "Despesa adicionada!");
-      if (onSaved) onSaved();
 
+      Alert.alert('Sucesso', expense?.id ? 'Despesa atualizada!' : 'Despesa adicionada!');
+      if (onSaved) onSaved();
     } catch (error) {
-      console.error("❌ Erro ao salvar despesa:", error);
-      Alert.alert("Erro", "Não foi possível salvar a despesa.");
+      console.error('❌ Erro ao salvar despesa:', error);
+      Alert.alert('Erro', 'Não foi possível salvar a despesa.');
     } finally {
       setSaving(false);
     }
@@ -213,7 +233,7 @@ export default function ExpenseForm({ expense, onSaved }) {
 
   const CustomDatePicker = () => {
     const [tempDate, setTempDate] = useState(selectedDate);
-    
+
     const generateDateOptions = () => {
       const dates = [];
       for (let i = 0; i < 30; i++) {
@@ -230,64 +250,54 @@ export default function ExpenseForm({ expense, onSaved }) {
       <Modal
         visible={showDatePicker}
         transparent={true}
-        animationType="slide"
+        animationType='slide'
         onRequestClose={() => setShowDatePicker(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>📅 Selecionar Data</Text>
-              <TouchableOpacity 
-                onPress={() => setShowDatePicker(false)}
-                style={styles.closeButton}
-              >
+              <TouchableOpacity onPress={() => setShowDatePicker(false)} style={styles.closeButton}>
                 <Text style={styles.closeButtonText}>✕</Text>
               </TouchableOpacity>
             </View>
-            
+
             <ScrollView style={styles.modalBody}>
               {dateOptions.map((date, index) => {
                 const isSelected = tempDate.toDateString() === date.toDateString();
                 return (
                   <TouchableOpacity
                     key={index}
-                    style={[
-                      styles.dateOption,
-                      isSelected && styles.dateOptionSelected
-                    ]}
+                    style={[styles.dateOption, isSelected && styles.dateOptionSelected]}
                     onPress={() => setTempDate(date)}
                   >
                     <View style={styles.dateOptionContent}>
-                      <Text style={[
-                        styles.dateOptionMain,
-                        isSelected && styles.dateOptionMainSelected
-                      ]}>
+                      <Text
+                        style={[styles.dateOptionMain, isSelected && styles.dateOptionMainSelected]}
+                      >
                         {getDateText(date)}
                       </Text>
-                      <Text style={[
-                        styles.dateOptionSub,
-                        isSelected && styles.dateOptionSubSelected
-                      ]}>
+                      <Text
+                        style={[styles.dateOptionSub, isSelected && styles.dateOptionSubSelected]}
+                      >
                         {formatDateBR(date)}
                       </Text>
                     </View>
-                    {isSelected && (
-                      <Text style={styles.dateCheckmark}>✓</Text>
-                    )}
+                    {isSelected && <Text style={styles.dateCheckmark}>✓</Text>}
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
 
             <View style={styles.modalFooter}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.cancelButton}
                 onPress={() => setShowDatePicker(false)}
               >
                 <Text style={styles.cancelButtonText}>Cancelar</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.saveButton}
                 onPress={() => handleDateSelect(tempDate)}
               >
@@ -302,7 +312,7 @@ export default function ExpenseForm({ expense, onSaved }) {
 
   const renderExpensePreview = () => {
     const hasData = description || amount || selectedCategory;
-    
+
     if (!hasData) return null;
 
     return (
@@ -313,9 +323,7 @@ export default function ExpenseForm({ expense, onSaved }) {
             <Text style={styles.previewIconText}>💰</Text>
           </View>
           <View style={styles.previewContent}>
-            <Text style={styles.previewName}>
-              {description || 'Descrição da despesa'}
-            </Text>
+            <Text style={styles.previewName}>{description || 'Descrição da despesa'}</Text>
             <Text style={styles.previewAmount}>
               {amount ? formatCurrency(parseFloat(amount.replace(',', '.')) || 0) : 'R$ 0,00'}
             </Text>
@@ -328,7 +336,7 @@ export default function ExpenseForm({ expense, onSaved }) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size='large' color='#10b981' />
         <Text style={styles.loadingText}>Carregando despesas...</Text>
       </View>
     );
@@ -345,17 +353,13 @@ export default function ExpenseForm({ expense, onSaved }) {
               <Text style={styles.title}>Despesas</Text>
             </View>
             <Text style={styles.subtitle}>
-              {expenses.length === 0 
-                ? "Registre suas despesas" 
-                : `${expenses.length} despesa${expenses.length !== 1 ? 's' : ''} recente${expenses.length !== 1 ? 's' : ''}`
-              }
+              {expenses.length === 0
+                ? 'Registre suas despesas'
+                : `${expenses.length} despesa${expenses.length !== 1 ? 's' : ''} recente${expenses.length !== 1 ? 's' : ''}`}
             </Text>
           </View>
-          
-          <TouchableOpacity 
-            style={styles.addButton}
-            onPress={openNewExpenseModal}
-          >
+
+          <TouchableOpacity style={styles.addButton} onPress={openNewExpenseModal}>
             <Text style={styles.addButtonIcon}>+</Text>
             <Text style={styles.addButtonText}>Nova</Text>
           </TouchableOpacity>
@@ -370,10 +374,7 @@ export default function ExpenseForm({ expense, onSaved }) {
           <Text style={styles.emptySubtitle}>
             Comece a registrar suas despesas para ter controle dos seus gastos!
           </Text>
-          <TouchableOpacity 
-            style={styles.emptyButton}
-            onPress={openNewExpenseModal}
-          >
+          <TouchableOpacity style={styles.emptyButton} onPress={openNewExpenseModal}>
             <Text style={styles.emptyButtonText}>➕ Criar Primeira Despesa</Text>
           </TouchableOpacity>
         </View>
@@ -386,21 +387,18 @@ export default function ExpenseForm({ expense, onSaved }) {
                 <View style={styles.expenseIconContainer}>
                   <Text style={styles.expenseIconText}>{item.icon}</Text>
                 </View>
-                
+
                 <View style={styles.expenseInfo}>
                   <Text style={styles.expenseName}>{item.description}</Text>
                   <Text style={styles.expenseCategory}>{item.category}</Text>
                 </View>
-                
+
                 <Text style={styles.expenseAmount}>{formatCurrency(item.amount)}</Text>
               </View>
             </View>
           ))}
-          
-          <TouchableOpacity 
-            style={styles.newButton}
-            onPress={openNewExpenseModal}
-          >
+
+          <TouchableOpacity style={styles.newButton} onPress={openNewExpenseModal}>
             <Text style={styles.newButtonText}>➕ Nova Despesa</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -410,7 +408,7 @@ export default function ExpenseForm({ expense, onSaved }) {
       <Modal
         visible={modalVisible}
         transparent={true}
-        animationType="slide"
+        animationType='slide'
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
@@ -420,10 +418,7 @@ export default function ExpenseForm({ expense, onSaved }) {
               <Text style={styles.modalTitle}>
                 {expense?.id ? '✏️ Editar Despesa' : '➕ Nova Despesa'}
               </Text>
-              <TouchableOpacity 
-                onPress={() => setModalVisible(false)}
-                style={styles.closeButton}
-              >
+              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeButton}>
                 <Text style={styles.closeButtonText}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -435,15 +430,13 @@ export default function ExpenseForm({ expense, onSaved }) {
                 <Text style={styles.fieldLabel}>📝 Descrição *</Text>
                 <TextInput
                   style={[styles.textInput, errors.description && styles.inputError]}
-                  placeholder="Ex: Almoço no restaurante"
+                  placeholder='Ex: Almoço no restaurante'
                   value={description}
                   onChangeText={setDescription}
                   maxLength={100}
                   autoFocus={true}
                 />
-                {errors.description && (
-                  <Text style={styles.errorText}>{errors.description}</Text>
-                )}
+                {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
                 <Text style={styles.charCounter}>{description.length}/100</Text>
               </View>
 
@@ -453,15 +446,13 @@ export default function ExpenseForm({ expense, onSaved }) {
                   <Text style={styles.currency}>R$</Text>
                   <TextInput
                     style={styles.amountInput}
-                    placeholder="0,00"
+                    placeholder='0,00'
                     value={amount}
                     onChangeText={handleAmountChange}
-                    keyboardType="numeric"
+                    keyboardType='numeric'
                   />
                 </View>
-                {errors.amount && (
-                  <Text style={styles.errorText}>{errors.amount}</Text>
-                )}
+                {errors.amount && <Text style={styles.errorText}>{errors.amount}</Text>}
               </View>
 
               {/* Data */}
@@ -473,12 +464,8 @@ export default function ExpenseForm({ expense, onSaved }) {
                 >
                   <Text style={styles.dateSelectorIcon}>📅</Text>
                   <View style={styles.dateSelectorContent}>
-                    <Text style={styles.dateSelectorMain}>
-                      {getDateText(selectedDate)}
-                    </Text>
-                    <Text style={styles.dateSelectorSub}>
-                      {formatDateBR(selectedDate)}
-                    </Text>
+                    <Text style={styles.dateSelectorMain}>{getDateText(selectedDate)}</Text>
+                    <Text style={styles.dateSelectorSub}>{formatDateBR(selectedDate)}</Text>
                   </View>
                   <Text style={styles.dateSelectorArrow}>▼</Text>
                 </TouchableOpacity>
@@ -487,7 +474,7 @@ export default function ExpenseForm({ expense, onSaved }) {
               {/* Categoria */}
               <View style={styles.fieldContainer}>
                 <Text style={styles.fieldLabel}>📂 Categoria *</Text>
-                <ExpenseCategoryList 
+                <ExpenseCategoryList
                   selectedCategory={selectedCategory}
                   onCategorySelect={handleCategorySelect}
                 />
@@ -496,7 +483,7 @@ export default function ExpenseForm({ expense, onSaved }) {
               {/* Forma de Pagamento */}
               <View style={styles.fieldContainer}>
                 <Text style={styles.fieldLabel}>💳 Forma de Pagamento</Text>
-                <ExpensePaymentMethodList 
+                <ExpensePaymentMethodList
                   selectedMethod={selectedPaymentMethod}
                   onMethodSelect={handlePaymentMethodSelect}
                 />
@@ -505,7 +492,7 @@ export default function ExpenseForm({ expense, onSaved }) {
               {/* Estabelecimento */}
               <View style={styles.fieldContainer}>
                 <Text style={styles.fieldLabel}>🏪 Estabelecimento</Text>
-                <ExpenseEstablishmentList 
+                <ExpenseEstablishmentList
                   selectedEstablishment={selectedEstablishment}
                   onEstablishmentSelect={handleEstablishmentSelect}
                 />
@@ -517,23 +504,21 @@ export default function ExpenseForm({ expense, onSaved }) {
 
             {/* Footer com Botões */}
             <View style={styles.modalFooter}>
-              <TouchableOpacity 
-                style={styles.cancelButton}
-                onPress={() => setModalVisible(false)}
-              >
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
                 <Text style={styles.cancelButtonText}>Cancelar</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[
                   styles.saveButton,
-                  (!description.trim() || !amount.trim() || !selectedCategory) && styles.saveButtonDisabled
+                  (!description.trim() || !amount.trim() || !selectedCategory) &&
+                    styles.saveButtonDisabled
                 ]}
                 onPress={handleSave}
                 disabled={!description.trim() || !amount.trim() || !selectedCategory || saving}
               >
                 {saving ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
+                  <ActivityIndicator size='small' color='#ffffff' />
                 ) : (
                   <Text style={styles.saveButtonText}>
                     {expense?.id ? '💾 Salvar' : '➕ Criar'}
@@ -554,7 +539,7 @@ export default function ExpenseForm({ expense, onSaved }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f7f9fc',
+    backgroundColor: '#f7f9fc'
   },
   header: {
     backgroundColor: '#ffffff',
@@ -566,34 +551,34 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 4
   },
   headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'center'
   },
   headerTextContainer: {
-    flex: 1,
+    flex: 1
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 4
   },
   titleIcon: {
     fontSize: 18,
-    marginRight: 8,
+    marginRight: 8
   },
   title: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1e293b',
+    color: '#1e293b'
   },
   subtitle: {
     fontSize: 13,
     color: '#64748b',
-    fontWeight: '400',
+    fontWeight: '400'
   },
   addButton: {
     backgroundColor: '#10b981',
@@ -606,29 +591,29 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 6,
-    elevation: 3,
+    elevation: 3
   },
   addButtonIcon: {
     fontSize: 16,
     color: '#ffffff',
     fontWeight: '600',
-    marginRight: 6,
+    marginRight: 6
   },
   addButtonText: {
     fontSize: 14,
     color: '#ffffff',
-    fontWeight: '600',
+    fontWeight: '600'
   },
   list: {
     flex: 1,
-    padding: 16,
+    padding: 16
   },
   listTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#374151',
     marginBottom: 12,
-    marginLeft: 4,
+    marginLeft: 4
   },
   expenseCard: {
     backgroundColor: '#ffffff',
@@ -642,12 +627,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(99, 102, 241, 0.08)',
-    minHeight: 64,
+    minHeight: 64
   },
   expenseContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: 16
   },
   expenseIconContainer: {
     width: 40,
@@ -658,28 +643,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
     borderWidth: 1,
-    borderColor: 'rgba(99, 102, 241, 0.12)',
+    borderColor: 'rgba(99, 102, 241, 0.12)'
   },
   expenseIconText: {
-    fontSize: 18,
+    fontSize: 18
   },
   expenseInfo: {
-    flex: 1,
+    flex: 1
   },
   expenseName: {
     fontSize: 15,
     fontWeight: '600',
     color: '#1e293b',
-    marginBottom: 2,
+    marginBottom: 2
   },
   expenseCategory: {
     fontSize: 12,
-    color: '#64748b',
+    color: '#64748b'
   },
   expenseAmount: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#10b981',
+    color: '#10b981'
   },
   newButton: {
     backgroundColor: '#f0f4ff',
@@ -688,37 +673,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 16,
     borderWidth: 1,
-    borderColor: 'rgba(99, 102, 241, 0.2)',
+    borderColor: 'rgba(99, 102, 241, 0.2)'
   },
   newButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#6366f1',
+    color: '#6366f1'
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
+    padding: 40
   },
   emptyIcon: {
     fontSize: 64,
     marginBottom: 20,
-    opacity: 0.3,
+    opacity: 0.3
   },
   emptyTitle: {
     fontSize: 22,
     fontWeight: '600',
     color: '#374151',
     marginBottom: 12,
-    textAlign: 'center',
+    textAlign: 'center'
   },
   emptySubtitle: {
     fontSize: 16,
     color: '#6b7280',
     textAlign: 'center',
     lineHeight: 24,
-    marginBottom: 32,
+    marginBottom: 32
   },
   emptyButton: {
     backgroundColor: '#10b981',
@@ -729,25 +714,25 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 6,
-    elevation: 3,
+    elevation: 3
   },
   emptyButtonText: {
     color: '#ffffff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600'
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f7f9fc',
-    padding: 20,
+    padding: 20
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
     color: '#64748b',
-    fontWeight: '500',
+    fontWeight: '500'
   },
 
   // Modal
@@ -755,7 +740,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.4)',
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
   modalContent: {
     backgroundColor: '#ffffff',
@@ -766,7 +751,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 24 },
     shadowOpacity: 0.2,
     shadowRadius: 48,
-    elevation: 24,
+    elevation: 24
   },
   modalHeader: {
     flexDirection: 'row',
@@ -774,12 +759,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    borderBottomColor: '#f1f5f9'
   },
   modalTitle: {
     fontSize: 22,
     fontWeight: '600',
-    color: '#1e293b',
+    color: '#1e293b'
   },
   closeButton: {
     width: 40,
@@ -789,25 +774,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#e2e8f0'
   },
   closeButtonText: {
     fontSize: 18,
     color: '#64748b',
-    fontWeight: '500',
+    fontWeight: '500'
   },
   modalBody: {
     padding: 24,
-    maxHeight: 450,
+    maxHeight: 450
   },
   fieldContainer: {
-    marginBottom: 24,
+    marginBottom: 24
   },
   fieldLabel: {
     fontSize: 16,
     fontWeight: '500',
     color: '#374151',
-    marginBottom: 10,
+    marginBottom: 10
   },
   textInput: {
     borderWidth: 1,
@@ -822,23 +807,23 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 2
   },
   inputError: {
     borderColor: '#ef4444',
-    backgroundColor: '#fef2f2',
+    backgroundColor: '#fef2f2'
   },
   errorText: {
     color: '#ef4444',
     fontSize: 14,
     marginTop: 6,
-    fontWeight: '500',
+    fontWeight: '500'
   },
   charCounter: {
     fontSize: 12,
     color: '#94a3b8',
     textAlign: 'right',
-    marginTop: 6,
+    marginTop: 6
   },
   amountContainer: {
     flexDirection: 'row',
@@ -852,20 +837,20 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 2
   },
   currency: {
     fontSize: 16,
     fontWeight: '600',
     color: '#6b7280',
-    marginRight: 8,
+    marginRight: 8
   },
   amountInput: {
     flex: 1,
     paddingVertical: 16,
     paddingRight: 18,
     fontSize: 16,
-    color: '#1e293b',
+    color: '#1e293b'
   },
   dateSelector: {
     flexDirection: 'row',
@@ -880,29 +865,29 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 2
   },
   dateSelectorIcon: {
     fontSize: 20,
-    marginRight: 12,
+    marginRight: 12
   },
   dateSelectorContent: {
-    flex: 1,
+    flex: 1
   },
   dateSelectorMain: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1e293b',
-    marginBottom: 2,
+    marginBottom: 2
   },
   dateSelectorSub: {
     fontSize: 13,
-    color: '#6b7280',
+    color: '#6b7280'
   },
   dateSelectorArrow: {
     fontSize: 12,
     color: '#94a3b8',
-    fontWeight: '600',
+    fontWeight: '600'
   },
   dateOption: {
     flexDirection: 'row',
@@ -911,43 +896,43 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    borderBottomColor: '#f1f5f9'
   },
   dateOptionSelected: {
-    backgroundColor: '#f0f4ff',
+    backgroundColor: '#f0f4ff'
   },
   dateOptionContent: {
-    flex: 1,
+    flex: 1
   },
   dateOptionMain: {
     fontSize: 16,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 2,
+    marginBottom: 2
   },
   dateOptionMainSelected: {
-    color: '#6366f1',
+    color: '#6366f1'
   },
   dateOptionSub: {
     fontSize: 13,
-    color: '#6b7280',
+    color: '#6b7280'
   },
   dateOptionSubSelected: {
-    color: '#6366f1',
+    color: '#6366f1'
   },
   dateCheckmark: {
     fontSize: 18,
     color: '#6366f1',
-    fontWeight: '700',
+    fontWeight: '700'
   },
   previewContainer: {
-    marginBottom: 24,
+    marginBottom: 24
   },
   previewLabel: {
     fontSize: 16,
     fontWeight: '500',
     color: '#374151',
-    marginBottom: 16,
+    marginBottom: 16
   },
   previewCard: {
     flexDirection: 'row',
@@ -961,7 +946,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 2
   },
   previewIcon: {
     width: 48,
@@ -972,31 +957,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 16,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#e2e8f0'
   },
   previewIconText: {
-    fontSize: 20,
+    fontSize: 20
   },
   previewContent: {
-    flex: 1,
+    flex: 1
   },
   previewName: {
     fontSize: 17,
     fontWeight: '500',
     color: '#1e293b',
-    marginBottom: 4,
+    marginBottom: 4
   },
   previewAmount: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#10b981',
+    color: '#10b981'
   },
   modalFooter: {
     flexDirection: 'row',
     padding: 24,
     borderTopWidth: 1,
     borderTopColor: '#f1f5f9',
-    gap: 16,
+    gap: 16
   },
   cancelButton: {
     flex: 1,
@@ -1005,12 +990,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#e2e8f0'
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#64748b',
+    color: '#64748b'
   },
   saveButton: {
     flex: 1,
@@ -1022,16 +1007,16 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 4
   },
   saveButtonDisabled: {
     backgroundColor: '#d1d5db',
     shadowOpacity: 0,
-    elevation: 0,
+    elevation: 0
   },
   saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
-  },
+    color: '#ffffff'
+  }
 });

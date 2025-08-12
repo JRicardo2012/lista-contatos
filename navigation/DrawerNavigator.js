@@ -1,138 +1,302 @@
-// navigation/DrawerNavigator.js - VERSÃO COMPLETA COM AUTENTICAÇÃO
+// navigation/DrawerNavigator.js - DESIGN NUBANK
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Dashboard from '../components/Dashboard';
-import { createDrawerNavigator } from '@react-navigation/drawer';
+import {
+  createDrawerNavigator,
+  DrawerContentScrollView,
+  DrawerItemList,
+  DrawerItem
+} from '@react-navigation/drawer';
 import CategoryManager from '../components/CategoryManager';
 import ExpenseManager from '../components/ExpenseManager';
 import EstablishmentManager from '../components/EstablishmentManager';
+import EstablishmentCategoryManager from '../components/EstablishmentCategoryManager';
 import GroupedExpenseList from '../components/GroupedExpenseList';
 import AnnualExpenseSummary from '../components/AnnualExpenseSummary';
 import PaymentMethodManager from '../components/PaymentMethodManager';
 import MonthlyReport from '../components/MonthlyReport';
-import ProfileScreen from '../screens/ProfileScreen'; // NOVO IMPORT
+import ProfileScreen from '../screens/ProfileScreen';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useAuth } from '../services/AuthContext';
+import {
+  NUBANK_COLORS,
+  NUBANK_SPACING,
+  NUBANK_FONT_SIZES,
+  NUBANK_BORDER_RADIUS,
+  NUBANK_FONT_WEIGHTS
+} from '../constants/nubank-theme';
 
 const Drawer = createDrawerNavigator();
 
+// Componente customizado para o conteúdo do drawer
+function CustomDrawerContent(props) {
+  const { user, logout } = useAuth();
+
+  const menuItems = [
+    { name: 'Dashboard', title: 'Início', icon: 'home' },
+    { name: 'Despesas', title: 'Despesas', icon: 'cash-minus' },
+    { name: 'Categorias', title: 'Categorias', icon: 'tag-multiple' },
+    { name: 'Estabelecimentos', title: 'Estabelecimentos', icon: 'store' },
+    { name: 'Categorias de Estabelecimentos', title: 'Categorias de Estabelecimentos', icon: 'store-plus' },
+    { name: 'Formas de Pagamento', title: 'Formas de Pagamento', icon: 'credit-card-multiple' },
+    { name: 'Resumo Diário', title: 'Resumo Diário', icon: 'calendar-today' },
+    { name: 'Resumo Mensal', title: 'Relatório Mensal', icon: 'calendar-month' },
+    { name: 'Resumo Anual', title: 'Resumo Anual', icon: 'chart-pie' },
+    { name: 'Perfil', title: 'Perfil', icon: 'account-circle' }
+  ];
+
+  return (
+    <DrawerContentScrollView {...props} style={styles.drawerContent}>
+      {/* Header do drawer */}
+      <View style={styles.drawerHeader}>
+        <View style={styles.userCircle}>
+          <MaterialCommunityIcons name='account' size={32} color={NUBANK_COLORS.TEXT_WHITE} />
+        </View>
+        <Text style={styles.userName}>{user?.name || 'Usuário'}</Text>
+        <Text style={styles.userEmail}>{user?.email || ''}</Text>
+      </View>
+
+      {/* Itens do menu usando DrawerItem */}
+      <View style={styles.drawerItemsContainer}>
+        {menuItems.map((item, index) => (
+          <DrawerItem
+            key={index}
+            label={item.title}
+            icon={({ color, size }) => (
+              <MaterialCommunityIcons name={item.icon} size={24} color={color} />
+            )}
+            onPress={() => {
+              console.log('Navegando para:', item.name);
+              props.navigation.navigate(item.name);
+            }}
+            activeTintColor={NUBANK_COLORS.PRIMARY}
+            inactiveTintColor={NUBANK_COLORS.TEXT_PRIMARY}
+            activeBackgroundColor={`${NUBANK_COLORS.PRIMARY}15`}
+            labelStyle={styles.drawerItemLabel}
+            style={styles.drawerItemStyle}
+          />
+        ))}
+      </View>
+
+      {/* Botão de logout */}
+      <TouchableOpacity
+        style={styles.logoutButton}
+        onPress={() => {
+          logout();
+        }}
+      >
+        <MaterialCommunityIcons name='logout' size={20} color={NUBANK_COLORS.PRIMARY} />
+        <Text style={styles.logoutText}>Sair</Text>
+      </TouchableOpacity>
+    </DrawerContentScrollView>
+  );
+}
+
 export default function DrawerNavigator() {
   return (
-    <Drawer.Navigator 
-      initialRouteName="Dashboard"
+    <Drawer.Navigator
+      initialRouteName='Dashboard'
+      drawerContent={props => <CustomDrawerContent {...props} />}
       screenOptions={{
-        // 🎨 HEADER PERSONALIZADO
+        // Header estilo Nubank para as demais telas
         headerShown: true,
         headerStyle: {
-          backgroundColor: '#6366F1',
+          backgroundColor: NUBANK_COLORS.PRIMARY,
           elevation: 4,
-          shadowOpacity: 0.3,
+          shadowOpacity: 0.1,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 }
         },
-        headerTintColor: '#FFFFFF',
+        headerTintColor: NUBANK_COLORS.TEXT_WHITE,
         headerTitleStyle: {
-          fontSize: 17,
-          fontWeight: '700',
+          fontSize: NUBANK_FONT_SIZES.LG,
+          fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD
         },
-        
-        // 🎨 DRAWER PERSONALIZADO COM TEXTOS MAIORES
+
+        // Drawer estilo Nubank
         drawerStyle: {
-          backgroundColor: '#FFFFFF',
-          width: 320,
+          backgroundColor: NUBANK_COLORS.BACKGROUND,
+          width: 300
         },
-        drawerActiveTintColor: '#6366F1',
-        drawerInactiveTintColor: '#374151',
-        drawerActiveBackgroundColor: '#EEF2FF',
-        
-        // 📝 TEXTOS DO DRAWER - AUMENTADOS
+        drawerActiveTintColor: NUBANK_COLORS.PRIMARY,
+        drawerInactiveTintColor: NUBANK_COLORS.TEXT_PRIMARY,
+        drawerActiveBackgroundColor: `${NUBANK_COLORS.PRIMARY}15`,
+
+        // Estilo dos textos do drawer
         drawerLabelStyle: {
-          fontSize: 17,
-          fontWeight: '650',
-          marginLeft: -12,
-          lineHeight: 24,
+          fontSize: NUBANK_FONT_SIZES.MD,
+          fontWeight: NUBANK_FONT_WEIGHTS.MEDIUM,
+          marginLeft: NUBANK_SPACING.MD
         },
-        
-        // 📱 ESTILO DOS ITENS
+
+        // Estilo dos itens
         drawerItemStyle: {
-          borderRadius: 12,
-          marginHorizontal: 12,
+          borderRadius: NUBANK_BORDER_RADIUS.LG,
           marginVertical: 4,
-          paddingVertical: 8,
-        },
-        
-        // 🎯 TIPO DO DRAWER
-        drawerType: 'front',
-        overlayColor: 'rgba(0, 0, 0, 0.5)',
+          paddingHorizontal: NUBANK_SPACING.MD,
+          paddingVertical: NUBANK_SPACING.XS
+        }
       }}
     >
       <Drawer.Screen
-        name="Dashboard"
+        name='Dashboard'
         component={Dashboard}
-        options={{ 
-          drawerLabel: "🏠 Dashboard",
-          title: "Dashboard Financeiro"
+        options={{
+          title: 'Início',
+          headerShown: false, // Remove o header duplo no Dashboard
+          drawerIcon: ({ color }) => <MaterialCommunityIcons name='home' size={24} color={color} />
         }}
       />
+
       <Drawer.Screen
-        name="Despesas"
+        name='Despesas'
         component={ExpenseManager}
-        options={{ 
-          drawerLabel: "💰 Gerenciar Despesas",
-          title: "Gerenciador de Despesas"
+        options={{
+          drawerIcon: ({ color }) => (
+            <MaterialCommunityIcons name='cash-minus' size={24} color={color} />
+          )
         }}
       />
+
       <Drawer.Screen
-        name="Resumo Diário"
-        component={GroupedExpenseList}
-        options={{ 
-          drawerLabel: "📊 Resumo Diário",
-          title: "Últimos 7 Dias"
-        }}
-      />
-      <Drawer.Screen
-        name="Relatório Mensal"
-        component={MonthlyReport}
-        options={{ 
-          drawerLabel: "📈 Relatório Mensal",
-          title: "Análise Mensal"
-        }}
-      />
-      <Drawer.Screen
-        name="Resumo Anual"
-        component={AnnualExpenseSummary}
-        options={{ 
-          drawerLabel: "📅 Resumo Anual",
-          title: "Análise Anual"
-        }}
-      />
-      <Drawer.Screen
-        name="Estabelecimentos"
-        component={EstablishmentManager}
-        options={{ 
-          drawerLabel: "🏪 Estabelecimentos",
-          title: "Gerenciar Locais"
-        }}
-      />
-      <Drawer.Screen
-        name="Categorias"
+        name='Categorias'
         component={CategoryManager}
-        options={{ 
-          drawerLabel: "📂 Categorias",
-          title: "Organizar Despesas"
+        options={{
+          drawerIcon: ({ color }) => (
+            <MaterialCommunityIcons name='tag-multiple' size={24} color={color} />
+          )
         }}
       />
+
       <Drawer.Screen
-        name="Formas de Pagamento"
+        name='Estabelecimentos'
+        component={EstablishmentManager}
+        options={{
+          drawerIcon: ({ color }) => <MaterialCommunityIcons name='store' size={24} color={color} />
+        }}
+      />
+
+      <Drawer.Screen
+        name='Categorias de Estabelecimentos'
+        component={EstablishmentCategoryManager}
+        options={{
+          title: 'Categorias de Estabelecimentos',
+          drawerIcon: ({ color }) => <MaterialCommunityIcons name='store-plus' size={24} color={color} />
+        }}
+      />
+
+      <Drawer.Screen
+        name='Formas de Pagamento'
         component={PaymentMethodManager}
-        options={{ 
-          drawerLabel: "💳 Formas de Pagamento",
-          title: "Métodos de Pagamento"
+        options={{
+          drawerIcon: ({ color }) => (
+            <MaterialCommunityIcons name='credit-card-multiple' size={24} color={color} />
+          )
         }}
       />
-      {/* NOVA TELA DE PERFIL */}
+
       <Drawer.Screen
-        name="Perfil"
+        name='Resumo Diário'
+        component={GroupedExpenseList}
+        options={{
+          drawerIcon: ({ color }) => (
+            <MaterialCommunityIcons name='calendar-today' size={24} color={color} />
+          )
+        }}
+      />
+
+      <Drawer.Screen
+        name='Resumo Mensal'
+        component={MonthlyReport}
+        options={{
+          title: 'Relatório Mensal',
+          drawerIcon: ({ color }) => (
+            <MaterialCommunityIcons name='calendar-month' size={24} color={color} />
+          )
+        }}
+      />
+
+      <Drawer.Screen
+        name='Resumo Anual'
+        component={AnnualExpenseSummary}
+        options={{
+          drawerIcon: ({ color }) => (
+            <MaterialCommunityIcons name='chart-pie' size={24} color={color} />
+          )
+        }}
+      />
+
+      <Drawer.Screen
+        name='Perfil'
         component={ProfileScreen}
-        options={{ 
-          drawerLabel: "👤 Meu Perfil",
-          title: "Perfil do Usuário"
+        options={{
+          drawerIcon: ({ color }) => (
+            <MaterialCommunityIcons name='account-circle' size={24} color={color} />
+          )
         }}
       />
     </Drawer.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  drawerContent: {
+    flex: 1
+  },
+  drawerHeader: {
+    backgroundColor: NUBANK_COLORS.PRIMARY,
+    paddingTop: 50,
+    paddingBottom: NUBANK_SPACING.XL,
+    paddingHorizontal: NUBANK_SPACING.LG,
+    marginBottom: NUBANK_SPACING.MD
+  },
+  userCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: `${NUBANK_COLORS.TEXT_WHITE}20`,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: NUBANK_SPACING.MD
+  },
+  userName: {
+    fontSize: NUBANK_FONT_SIZES.LG,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    color: NUBANK_COLORS.TEXT_WHITE,
+    marginBottom: NUBANK_SPACING.XS
+  },
+  userEmail: {
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: `${NUBANK_COLORS.TEXT_WHITE}CC`
+  },
+  drawerItemsContainer: {
+    flex: 1,
+    paddingHorizontal: NUBANK_SPACING.SM
+  },
+  drawerItemStyle: {
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
+    marginVertical: 2,
+    marginHorizontal: NUBANK_SPACING.SM
+  },
+  drawerItemLabel: {
+    fontSize: NUBANK_FONT_SIZES.MD,
+    fontWeight: NUBANK_FONT_WEIGHTS.MEDIUM,
+    marginLeft: NUBANK_SPACING.SM
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: NUBANK_SPACING.MD,
+    marginHorizontal: NUBANK_SPACING.MD,
+    marginBottom: NUBANK_SPACING.LG,
+    borderTopWidth: 1,
+    borderTopColor: NUBANK_COLORS.BACKGROUND_SECONDARY
+  },
+  logoutText: {
+    fontSize: NUBANK_FONT_SIZES.MD,
+    fontWeight: NUBANK_FONT_WEIGHTS.MEDIUM,
+    color: NUBANK_COLORS.PRIMARY,
+    marginLeft: NUBANK_SPACING.MD
+  }
+});

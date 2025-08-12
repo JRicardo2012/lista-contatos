@@ -1,15 +1,26 @@
-// components/EstablishmentManager.js - VERSÃO COM USER_ID
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity } from 'react-native';
+// components/EstablishmentManager.js - VERSÃO COM USER_ID E PESQUISA
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import EstablishmentForm from './EstablishmentForm';
 import EstablishmentList from './EstablishmentList';
 import { useAuth } from '../services/AuthContext';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import {
+  NUBANK_COLORS,
+  NUBANK_SPACING,
+  NUBANK_FONT_SIZES,
+  NUBANK_BORDER_RADIUS,
+  NUBANK_FONT_WEIGHTS,
+  NUBANK_SHADOWS
+} from '../constants/nubank-theme';
 
 export default function EstablishmentManager() {
   const { user } = useAuth();
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedEstablishment, setSelectedEstablishment] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeSearchQuery, setActiveSearchQuery] = useState('');
 
   function handleEdit(establishment) {
     setSelectedEstablishment(establishment);
@@ -27,45 +38,87 @@ export default function EstablishmentManager() {
     setModalVisible(true);
   }
 
+  function handleSearch() {
+    setActiveSearchQuery(searchQuery.trim());
+  }
+
+  function clearSearch() {
+    setSearchQuery('');
+    setActiveSearchQuery('');
+  }
+
   return (
     <View style={styles.container}>
-      {/* Header simples */}
+      {/* Header Nubank */}
       <View style={styles.header}>
-        <Text style={styles.icon}>🏪</Text>
-        <Text style={styles.title}>Estabelecimentos</Text>
-        <TouchableOpacity style={styles.addButton} onPress={handleAddNew}>
-          <Text style={styles.addButtonText}>+ Novo</Text>
-        </TouchableOpacity>
+        <View style={styles.headerContent}>
+          <View style={styles.titleContainer}>
+            <MaterialCommunityIcons
+              name='store'
+              size={24}
+              color={NUBANK_COLORS.PRIMARY}
+              style={styles.titleIcon}
+            />
+            <Text style={styles.title}>Estabelecimentos</Text>
+          </View>
+          <TouchableOpacity style={styles.addButton} onPress={handleAddNew}>
+            <MaterialCommunityIcons
+              name='plus'
+              size={20}
+              color={NUBANK_COLORS.TEXT_WHITE}
+              style={styles.addButtonIcon}
+            />
+            <Text style={styles.addButtonText}>Novo</Text>
+          </TouchableOpacity>
+        </View>
+        
+        {/* Campo de pesquisa fixo */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Pesquisar estabelecimentos..."
+              placeholderTextColor={NUBANK_COLORS.TEXT_TERTIARY}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onSubmitEditing={handleSearch}
+              returnKeyType="search"
+            />
+            <TouchableOpacity style={styles.searchIconButton} onPress={handleSearch}>
+              <MaterialCommunityIcons
+                name="magnify"
+                size={20}
+                color={NUBANK_COLORS.PRIMARY}
+              />
+            </TouchableOpacity>
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+                <MaterialCommunityIcons
+                  name="close-circle"
+                  size={16}
+                  color={NUBANK_COLORS.TEXT_SECONDARY}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
       </View>
 
-      {/* Lista com user_id */}
-      <EstablishmentList key={refreshKey} onEdit={handleEdit} userId={user?.id} />
+      {/* Lista com user_id e pesquisa */}
+      <EstablishmentList 
+        key={refreshKey} 
+        onEdit={handleEdit} 
+        userId={user?.id} 
+        searchQuery={activeSearchQuery}
+      />
 
-      {/* Modal simples */}
-      <Modal
+      {/* Novo Modal Form */}
+      <EstablishmentForm
         visible={modalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setModalVisible(false)}>
-              <Text style={styles.cancelButton}>Cancelar</Text>
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>
-              {selectedEstablishment ? 'Editar Estabelecimento' : 'Novo Estabelecimento'}
-            </Text>
-            <View style={styles.placeholder} />
-          </View>
-          
-          <EstablishmentForm 
-            establishment={selectedEstablishment} 
-            onSaved={handleSaved}
-            userId={user?.id}
-          />
-        </View>
-      </Modal>
+        establishment={selectedEstablishment}
+        onClose={() => setModalVisible(false)}
+        onSaved={handleSaved}
+      />
     </View>
   );
 }
@@ -73,61 +126,99 @@ export default function EstablishmentManager() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY
   },
+  
   header: {
+    backgroundColor: NUBANK_COLORS.BACKGROUND,
+    paddingHorizontal: NUBANK_SPACING.LG,
+    paddingTop: NUBANK_SPACING.LG,
+    paddingBottom: NUBANK_SPACING.LG,
+    borderBottomWidth: 1,
+    borderBottomColor: NUBANK_COLORS.CARD_BORDER
+  },
+  
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 20,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    justifyContent: 'space-between'
   },
-  icon: {
-    fontSize: 32,
+  
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1
   },
+  
+  titleIcon: {
+    marginRight: NUBANK_SPACING.SM
+  },
+  
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    flex: 1,
-    textAlign: 'center',
+    fontSize: NUBANK_FONT_SIZES.XL,
+    fontWeight: NUBANK_FONT_WEIGHTS.BOLD,
+    color: NUBANK_COLORS.TEXT_PRIMARY
   },
+  
+  
   addButton: {
-    backgroundColor: '#10b981',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  modalHeader: {
+    backgroundColor: NUBANK_COLORS.PRIMARY,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    paddingHorizontal: NUBANK_SPACING.MD,
+    paddingVertical: NUBANK_SPACING.SM,
+    borderRadius: NUBANK_BORDER_RADIUS.MD,
+    ...NUBANK_SHADOWS.SM
   },
-  cancelButton: {
-    color: '#ef4444',
-    fontSize: 16,
-    fontWeight: '600',
+  
+  addButtonIcon: {
+    marginRight: NUBANK_SPACING.XS
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1f2937',
+  
+  addButtonText: {
+    color: NUBANK_COLORS.TEXT_WHITE,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    fontSize: NUBANK_FONT_SIZES.SM
   },
-  placeholder: {
-    width: 60,
+  
+  searchContainer: {
+    paddingHorizontal: NUBANK_SPACING.LG,
+    paddingTop: NUBANK_SPACING.MD,
+    paddingBottom: NUBANK_SPACING.LG
   },
+  
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
+    paddingLeft: NUBANK_SPACING.MD,
+    paddingRight: NUBANK_SPACING.SM,
+    height: 44,
+    borderWidth: 1,
+    borderColor: NUBANK_COLORS.BACKGROUND_SECONDARY
+  },
+  
+  searchInput: {
+    flex: 1,
+    fontSize: NUBANK_FONT_SIZES.MD,
+    color: NUBANK_COLORS.TEXT_PRIMARY,
+    height: 44,
+    paddingRight: NUBANK_SPACING.SM
+  },
+  
+  searchIconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: NUBANK_BORDER_RADIUS.MD,
+    backgroundColor: NUBANK_COLORS.PRIMARY + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: NUBANK_SPACING.XS
+  },
+  
+  clearButton: {
+    marginLeft: NUBANK_SPACING.SM,
+    padding: NUBANK_SPACING.XS
+  }
 });

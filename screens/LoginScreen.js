@@ -1,4 +1,4 @@
-// screens/LoginScreen.js - VERSÃO SIMPLES E ROBUSTA
+// screens/LoginScreen.js - DESIGN NUBANK
 import React, { useState } from 'react';
 import {
   View,
@@ -7,18 +7,52 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
-  SafeAreaView
+  ActivityIndicator,
+  StatusBar,
+  Animated
 } from 'react-native';
 import { useAuth } from '../services/AuthContext';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import {
+  NUBANK_COLORS,
+  NUBANK_SPACING,
+  NUBANK_FONT_SIZES,
+  NUBANK_BORDER_RADIUS,
+  NUBANK_SHADOWS,
+  NUBANK_FONT_WEIGHTS
+} from '../constants/nubank-theme';
 
 export default function LoginScreen({ navigation }) {
   const { login } = useAuth();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Animações
+  const fadeAnim = useState(new Animated.Value(0))[0];
+  const slideAnim = useState(new Animated.Value(50))[0];
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 20,
+        friction: 7,
+        useNativeDriver: true
+      })
+    ]).start();
+  }, []);
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
@@ -32,14 +66,10 @@ export default function LoginScreen({ navigation }) {
 
     if (!result.success) {
       if (result.error.includes('Email não encontrado')) {
-        Alert.alert(
-          'Email não cadastrado',
-          'Deseja criar uma nova conta?',
-          [
-            { text: 'Não', style: 'cancel' },
-            { text: 'Sim', onPress: () => navigation.navigate('Register') }
-          ]
-        );
+        Alert.alert('Email não cadastrado', 'Deseja criar uma nova conta?', [
+          { text: 'Não', style: 'cancel' },
+          { text: 'Sim', onPress: () => navigation.navigate('Register') }
+        ]);
       } else if (result.error.includes('Senha incorreta')) {
         Alert.alert('Senha incorreta', 'Verifique sua senha e tente novamente');
       } else {
@@ -49,173 +79,253 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+    <View style={styles.container}>
+      <StatusBar barStyle='light-content' backgroundColor={NUBANK_COLORS.PRIMARY} />
+
+      <LinearGradient
+        colors={[NUBANK_COLORS.PRIMARY, NUBANK_COLORS.PRIMARY_DARK]}
+        style={styles.gradient}
       >
-        {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Text style={styles.logo}>💰</Text>
-          <Text style={styles.appName}>Controle Financeiro</Text>
-        </View>
-
-        {/* Formulário */}
-        <View style={styles.form}>
-          {/* Email */}
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              placeholderTextColor="#9CA3AF"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          {/* Senha */}
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Senha"
-              placeholderTextColor="#9CA3AF"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-            />
-            <TouchableOpacity 
-              style={styles.eyeButton}
-              onPress={() => setShowPassword(!showPassword)}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
+        >
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps='handled'
+          >
+            <Animated.View
+              style={[
+                styles.content,
+                {
+                  opacity: fadeAnim,
+                  transform: [{ translateY: slideAnim }]
+                }
+              ]}
             >
-              <Text style={styles.eyeIcon}>
-                {showPassword ? '👁️' : '👁️‍🗨️'}
-              </Text>
-            </TouchableOpacity>
-          </View>
+              {/* Logo */}
+              <View style={styles.logoContainer}>
+                <View style={styles.logoCircle}>
+                  <MaterialCommunityIcons
+                    name='cash-multiple'
+                    size={48}
+                    color={NUBANK_COLORS.TEXT_WHITE}
+                  />
+                </View>
+                <Text style={styles.appName}>Controle Financeiro</Text>
+              </View>
 
-          {/* Esqueceu a senha */}
-          <TouchableOpacity 
-            style={styles.forgotPassword}
-            onPress={() => Alert.alert('Em breve', 'Recuperação de senha será implementada')}
-          >
-            <Text style={styles.forgotPasswordText}>Esqueceu a senha?</Text>
-          </TouchableOpacity>
+              {/* Formulário */}
+              <View style={styles.formContainer}>
+                <Text style={styles.welcomeText}>Bem-vindo de volta</Text>
+                <Text style={styles.subtitleText}>Faça login para continuar</Text>
 
-          {/* Botão Login */}
-          <TouchableOpacity 
-            style={[styles.loginButton, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.loginButtonText}>Entrar</Text>
-            )}
-          </TouchableOpacity>
+                <View style={styles.inputContainer}>
+                  <MaterialCommunityIcons
+                    name='email-outline'
+                    size={20}
+                    color={NUBANK_COLORS.TEXT_TERTIARY}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder='E-mail'
+                    placeholderTextColor={NUBANK_COLORS.TEXT_TERTIARY}
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType='email-address'
+                    autoCapitalize='none'
+                    autoCorrect={false}
+                  />
+                </View>
 
-          {/* Criar conta */}
-          <View style={styles.signupContainer}>
-            <Text style={styles.signupText}>Não tem uma conta?</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-              <Text style={styles.signupLink}> Cadastre-se</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+                <View style={styles.inputContainer}>
+                  <MaterialCommunityIcons
+                    name='lock-outline'
+                    size={20}
+                    color={NUBANK_COLORS.TEXT_TERTIARY}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder='Senha'
+                    placeholderTextColor={NUBANK_COLORS.TEXT_TERTIARY}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize='none'
+                    autoCorrect={false}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.eyeButton}
+                  >
+                    <MaterialCommunityIcons
+                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color={NUBANK_COLORS.TEXT_TERTIARY}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.forgotPassword}
+                  onPress={() => Alert.alert('Em breve', 'Recuperação de senha será implementada')}
+                >
+                  <Text style={styles.forgotPasswordText}>Esqueceu a senha?</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.loginButton}
+                  onPress={handleLogin}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color={NUBANK_COLORS.TEXT_WHITE} />
+                  ) : (
+                    <Text style={styles.loginButtonText}>Entrar</Text>
+                  )}
+                </TouchableOpacity>
+
+                <View style={styles.footer}>
+                  <Text style={styles.footerText}>Não tem uma conta?</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+                    <Text style={styles.registerLink}> Cadastre-se</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Animated.View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
+    flex: 1
+  },
+  gradient: {
+    flex: 1
+  },
+  keyboardView: {
+    flex: 1
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 60,
+    justifyContent: 'center'
   },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: NUBANK_SPACING.LG
+  },
+
+  // Logo
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 60,
+    marginBottom: NUBANK_SPACING.XXL
   },
-  logo: {
-    fontSize: 100,
-    marginBottom: 16,
+  logoCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: `${NUBANK_COLORS.TEXT_WHITE}20`,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: NUBANK_SPACING.MD
   },
   appName: {
-    fontSize: 24,
-    fontWeight: '300',
-    color: '#1F2937',
-    letterSpacing: 1,
+    fontSize: NUBANK_FONT_SIZES.XXL,
+    fontWeight: NUBANK_FONT_WEIGHTS.BOLD,
+    color: NUBANK_COLORS.TEXT_WHITE,
+    textAlign: 'center'
   },
-  form: {
-    width: '100%',
+
+  // Formulário
+  formContainer: {
+    backgroundColor: NUBANK_COLORS.BACKGROUND,
+    borderRadius: NUBANK_BORDER_RADIUS.XL,
+    padding: NUBANK_SPACING.XL,
+    ...NUBANK_SHADOWS.LG
   },
+  welcomeText: {
+    fontSize: NUBANK_FONT_SIZES.XL,
+    fontWeight: NUBANK_FONT_WEIGHTS.BOLD,
+    color: NUBANK_COLORS.TEXT_PRIMARY,
+    marginBottom: NUBANK_SPACING.XS
+  },
+  subtitleText: {
+    fontSize: NUBANK_FONT_SIZES.MD,
+    color: NUBANK_COLORS.TEXT_SECONDARY,
+    marginBottom: NUBANK_SPACING.XL
+  },
+
+  // Inputs
   inputContainer: {
-    marginBottom: 16,
-    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
+    marginBottom: NUBANK_SPACING.MD,
+    paddingHorizontal: NUBANK_SPACING.MD,
+    height: 56
+  },
+  inputIcon: {
+    marginRight: NUBANK_SPACING.SM
   },
   input: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    paddingVertical: 12,
-    paddingRight: 40,
-    fontSize: 16,
-    color: '#1F2937',
+    flex: 1,
+    fontSize: NUBANK_FONT_SIZES.MD,
+    color: NUBANK_COLORS.TEXT_PRIMARY,
+    height: '100%'
   },
   eyeButton: {
-    position: 'absolute',
-    right: 0,
-    top: 10,
-    padding: 8,
+    padding: NUBANK_SPACING.SM
   },
-  eyeIcon: {
-    fontSize: 20,
-    opacity: 0.6,
-  },
+
+  // Esqueceu a senha
   forgotPassword: {
     alignSelf: 'flex-end',
-    marginTop: 8,
-    marginBottom: 32,
+    marginTop: NUBANK_SPACING.XS,
+    marginBottom: NUBANK_SPACING.LG
   },
   forgotPasswordText: {
-    color: '#6B7280',
-    fontSize: 14,
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.PRIMARY,
+    fontWeight: NUBANK_FONT_WEIGHTS.MEDIUM
   },
+
+  // Botão
   loginButton: {
-    backgroundColor: '#6366F1',
-    paddingVertical: 16,
-    borderRadius: 8,
+    backgroundColor: NUBANK_COLORS.PRIMARY,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
+    height: 56,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
+    marginBottom: NUBANK_SPACING.XL
   },
   loginButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: 1,
+    fontSize: NUBANK_FONT_SIZES.MD,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    color: NUBANK_COLORS.TEXT_WHITE
   },
-  signupContainer: {
+
+  // Footer
+  footer: {
     flexDirection: 'row',
     justifyContent: 'center',
+    alignItems: 'center'
   },
-  signupText: {
-    color: '#6B7280',
-    fontSize: 14,
+  footerText: {
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.TEXT_SECONDARY
   },
-  signupLink: {
-    color: '#6366F1',
-    fontSize: 14,
-    fontWeight: '600',
-  },
+  registerLink: {
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.PRIMARY,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD
+  }
 });

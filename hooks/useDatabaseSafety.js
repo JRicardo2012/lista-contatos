@@ -18,17 +18,16 @@ export const useDatabaseSafety = () => {
   const verifyDatabase = async () => {
     try {
       console.log('🔍 Verificando integridade do banco...');
-      
+
       // Testa se consegue acessar as tabelas principais
       await db.getFirstAsync('SELECT COUNT(*) as count FROM categories');
       await db.getFirstAsync('SELECT COUNT(*) as count FROM payment_methods');
       await db.getFirstAsync('SELECT COUNT(*) as count FROM expenses');
       await db.getFirstAsync('SELECT COUNT(*) as count FROM establishments');
-      
+
       console.log('✅ Banco verificado e funcionando');
       setIsReady(true);
       setError(null);
-      
     } catch (error) {
       console.error('❌ Erro na verificação do banco:', error);
       setError(error.message);
@@ -40,7 +39,7 @@ export const useDatabaseSafety = () => {
     if (!isReady) {
       throw new Error('Banco de dados não está pronto');
     }
-    
+
     try {
       return await db.getAllAsync(query, params);
     } catch (error) {
@@ -53,7 +52,7 @@ export const useDatabaseSafety = () => {
     if (!isReady) {
       throw new Error('Banco de dados não está pronto');
     }
-    
+
     try {
       return await db.runAsync(query, params);
     } catch (error) {
@@ -66,7 +65,7 @@ export const useDatabaseSafety = () => {
     if (!isReady) {
       throw new Error('Banco de dados não está pronto');
     }
-    
+
     try {
       return await db.getFirstAsync(query, params);
     } catch (error) {
