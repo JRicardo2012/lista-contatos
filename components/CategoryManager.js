@@ -1,5 +1,5 @@
 // components/CategoryManager.js - VERSÃO COM EXCLUSÃO DE DESPESAS
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,12 +10,16 @@ import {
   ActivityIndicator,
   ScrollView,
   Modal,
-  Keyboard
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import { StyleSheet } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../services/AuthContext';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   NUBANK_COLORS,
   NUBANK_SPACING,
@@ -25,7 +29,8 @@ import {
   NUBANK_SHADOWS
 } from '../constants/nubank-theme';
 
-export default function CategoryManager() {
+export default function CategoryManager({ navigation }) {
+  const insets = useSafeAreaInsets();
   const db = useSQLiteContext();
   const { user } = useAuth();
 
@@ -35,7 +40,7 @@ export default function CategoryManager() {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
-  const [searchText, setSearchText] = useState(''); // Estado para pesquisa
+  const [searchQuery, setSearchQuery] = useState('');
 
   // 🎨 ÍCONES DISPONÍVEIS PARA CATEGORIAS
   const availableIcons = [
@@ -81,26 +86,30 @@ export default function CategoryManager() {
 
   // Filtrar categorias baseado na pesquisa
   const filteredCategories = useMemo(() => {
-    if (!searchText.trim()) {
+    if (!searchQuery.trim()) {
       return categories;
     }
 
-    const searchLower = searchText.toLowerCase().trim();
+    const searchLower = searchQuery.toLowerCase().trim();
     return categories.filter(category => category.name.toLowerCase().includes(searchLower));
-  }, [categories, searchText]);
+  }, [categories, searchQuery]);
 
-  const openNewCategoryModal = () => {
+  const handleNewCategory = useCallback(() => {
     setEditingCategory(null);
     setNewCategoryName('');
     setSelectedIcon('📂');
     setModalVisible(true);
-  };
+  }, []);
 
-  const openEditCategoryModal = category => {
+  const handleEditCategory = useCallback((category) => {
     setEditingCategory(category);
     setNewCategoryName(category.name);
     setSelectedIcon(category.icon || '📂');
     setModalVisible(true);
+  }, []);
+
+  const clearSearch = () => {
+    setSearchQuery('');
   };
 
   async function loadCategories() {
@@ -389,87 +398,76 @@ export default function CategoryManager() {
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      {/* Header com gradiente */}
+      <LinearGradient
+        colors={NUBANK_COLORS.GRADIENT_PRIMARY}
+        style={[styles.header, { paddingTop: insets.top }]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
         <View style={styles.headerContent}>
-          <View style={styles.headerTextContainer}>
-            <View style={styles.titleRow}>
-              <MaterialCommunityIcons
-                name='tag-multiple'
-                size={24}
-                color={NUBANK_COLORS.PRIMARY}
-                style={styles.titleIcon}
-              />
-              <Text style={styles.title}>Categorias</Text>
-            </View>
-            <Text style={styles.subtitle}>
-              {categories.length === 0
-                ? 'Organize suas despesas com categorias'
-                : filteredCategories.length === categories.length
-                  ? `${categories.length} categoria${categories.length !== 1 ? 's' : ''} cadastrada${categories.length !== 1 ? 's' : ''}`
-                  : `${filteredCategories.length} de ${categories.length} categoria${categories.length !== 1 ? 's' : ''}`}
-            </Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <MaterialCommunityIcons
+              name="arrow-left"
+              size={24}
+              color={NUBANK_COLORS.TEXT_WHITE}
+            />
+          </TouchableOpacity>
+
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>Categorias</Text>
+            <Text style={styles.headerSubtitle}>Gerenciar categorias de despesas</Text>
           </View>
 
-          <TouchableOpacity style={styles.addButton} onPress={openNewCategoryModal}>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={handleNewCategory}
+          >
             <MaterialCommunityIcons
-              name='plus'
-              size={20}
+              name="plus"
+              size={24}
               color={NUBANK_COLORS.TEXT_WHITE}
-              style={styles.addButtonIcon}
             />
-            <Text style={styles.addButtonText}>Nova</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </LinearGradient>
 
-      {/* Barra de Pesquisa */}
-      {categories.length > 0 && (
-        <View style={styles.searchContainer}>
-          <View style={styles.searchInputContainer}>
-            <MaterialCommunityIcons
-              name='magnify'
-              size={20}
-              color={NUBANK_COLORS.TEXT_SECONDARY}
-              style={styles.searchIcon}
-            />
-            <TextInput
-              style={styles.searchInput}
-              placeholder='Pesquisar categorias...'
-              placeholderTextColor={NUBANK_COLORS.TEXT_SECONDARY}
-              value={searchText}
-              onChangeText={setSearchText}
-              onSubmitEditing={() => Keyboard.dismiss()}
-              returnKeyType='search'
-              autoCapitalize='none'
-              autoCorrect={false}
-            />
-            {searchText.length > 0 && (
-              <TouchableOpacity
-                onPress={() => setSearchText('')}
-                style={styles.clearButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <MaterialCommunityIcons
-                  name='close'
-                  size={18}
-                  color={NUBANK_COLORS.TEXT_SECONDARY}
-                />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Contador de resultados da pesquisa */}
-          {searchText.length > 0 && (
-            <Text style={styles.searchResults}>
-              {filteredCategories.length === 0
-                ? 'Nenhuma categoria encontrada'
-                : `${filteredCategories.length} categoria${filteredCategories.length !== 1 ? 's' : ''} encontrada${filteredCategories.length !== 1 ? 's' : ''}`}
-            </Text>
+      {/* Barra de pesquisa */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputWrapper}>
+          <MaterialCommunityIcons
+            name="magnify"
+            size={20}
+            color={NUBANK_COLORS.TEXT_SECONDARY}
+            style={styles.searchIcon}
+          />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar categoria..."
+            placeholderTextColor={NUBANK_COLORS.TEXT_TERTIARY}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+              <MaterialCommunityIcons
+                name="close-circle"
+                size={20}
+                color={NUBANK_COLORS.TEXT_SECONDARY}
+              />
+            </TouchableOpacity>
           )}
         </View>
-      )}
+      </View>
 
       {/* Lista de Categorias */}
       {categories.length === 0 ? (
@@ -484,7 +482,7 @@ export default function CategoryManager() {
           <Text style={styles.emptySubtitle}>
             Crie categorias personalizadas para organizar suas despesas!
           </Text>
-          <TouchableOpacity style={styles.emptyButton} onPress={openNewCategoryModal}>
+          <TouchableOpacity style={styles.emptyButton} onPress={handleNewCategory}>
             <MaterialCommunityIcons
               name='plus'
               size={20}
@@ -509,8 +507,8 @@ export default function CategoryManager() {
           <TouchableOpacity
             style={styles.createFromSearchButton}
             onPress={() => {
-              setNewCategoryName(searchText);
-              openNewCategoryModal();
+              setNewCategoryName(searchQuery);
+              handleNewCategory();
             }}
           >
             <MaterialCommunityIcons
@@ -519,7 +517,7 @@ export default function CategoryManager() {
               color={NUBANK_COLORS.PRIMARY}
               style={styles.createFromSearchIcon}
             />
-            <Text style={styles.createFromSearchText}>Criar categoria "{searchText}"</Text>
+            <Text style={styles.createFromSearchText}>Criar categoria "{searchQuery}"</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -530,7 +528,7 @@ export default function CategoryManager() {
             <View style={[styles.categoryCard, { marginTop: index === 0 ? 0 : 6 }]}>
               <TouchableOpacity
                 style={styles.categoryContent}
-                onPress={() => openEditCategoryModal(item)}
+                onPress={() => handleEditCategory(item)}
                 activeOpacity={0.8}
               >
                 <View style={styles.categoryIconContainer}>
@@ -654,120 +652,92 @@ export default function CategoryManager() {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f7f9fc'
+    backgroundColor: NUBANK_COLORS.BACKGROUND
   },
+  
   header: {
-    backgroundColor: '#ffffff',
-    paddingTop: 16,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 0,
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 4
+    paddingHorizontal: NUBANK_SPACING.LG,
+    paddingBottom: NUBANK_SPACING.LG
   },
+  
   headerContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'center',
+    marginTop: NUBANK_SPACING.MD
   },
-  headerTextContainer: {
+  
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: NUBANK_BORDER_RADIUS.ROUND,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: NUBANK_SPACING.MD
+  },
+  
+  headerTitleContainer: {
     flex: 1
   },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4
+  
+  headerTitle: {
+    fontSize: NUBANK_FONT_SIZES.LG,
+    fontWeight: NUBANK_FONT_WEIGHTS.BOLD,
+    color: NUBANK_COLORS.TEXT_WHITE,
+    marginBottom: NUBANK_SPACING.XS
   },
-  titleIcon: {
-    fontSize: 18,
-    marginRight: 8
+  
+  headerSubtitle: {
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.TEXT_WHITE,
+    opacity: 0.9
   },
-  title: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1e293b'
-  },
-  subtitle: {
-    fontSize: 13,
-    color: '#64748b',
-    fontWeight: '400'
-  },
+  
   addButton: {
-    backgroundColor: '#10b981',
-    flexDirection: 'row',
+    width: 40,
+    height: 40,
+    borderRadius: NUBANK_BORDER_RADIUS.ROUND,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 12,
-    shadowColor: '#10b981',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 3
-  },
-  addButtonIcon: {
-    fontSize: 16,
-    color: '#ffffff',
-    fontWeight: '600',
-    marginRight: 6
-  },
-  addButtonText: {
-    fontSize: 14,
-    color: '#ffffff',
-    fontWeight: '600'
+    justifyContent: 'center',
+    marginLeft: NUBANK_SPACING.MD
   },
 
-  // Estilos da barra de pesquisa
   searchContainer: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb'
+    paddingHorizontal: NUBANK_SPACING.LG,
+    paddingVertical: NUBANK_SPACING.MD,
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY
   },
-  searchInputContainer: {
+  
+  searchInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: '#e5e7eb'
+    backgroundColor: NUBANK_COLORS.BACKGROUND,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
+    paddingHorizontal: NUBANK_SPACING.MD,
+    ...NUBANK_SHADOWS.SM
   },
+  
   searchIcon: {
-    fontSize: 16,
-    marginRight: 8
+    marginRight: NUBANK_SPACING.SM
   },
+  
   searchInput: {
     flex: 1,
-    fontSize: 15,
-    color: '#1e293b',
-    paddingVertical: 10
+    paddingVertical: NUBANK_SPACING.MD,
+    fontSize: NUBANK_FONT_SIZES.MD,
+    color: NUBANK_COLORS.TEXT_PRIMARY
   },
+  
   clearButton: {
-    padding: 4
-  },
-  clearIcon: {
-    fontSize: 16,
-    color: '#6b7280',
-    fontWeight: '600'
-  },
-  searchResults: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 8,
-    marginLeft: 4
+    marginLeft: NUBANK_SPACING.SM
   },
 
   // Estilos para pesquisa sem resultados

@@ -11,6 +11,15 @@ import {
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../services/AuthContext'; // IMPORTANTE: Importar useAuth
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import {
+  NUBANK_COLORS,
+  NUBANK_SPACING,
+  NUBANK_FONT_SIZES,
+  NUBANK_BORDER_RADIUS,
+  NUBANK_SHADOWS,
+  NUBANK_FONT_WEIGHTS
+} from '../constants/nubank-theme';
 
 export default function EstablishmentList({ onEdit, searchQuery = '' }) {
   const db = useSQLiteContext();
@@ -254,7 +263,11 @@ export default function EstablishmentList({ onEdit, searchQuery = '' }) {
         style={styles.deleteButton}
         onPress={() => handleDelete(item.id, item.name)}
       >
-        <Text style={styles.deleteText}>🗑️</Text>
+        <MaterialCommunityIcons
+          name="delete"
+          size={20}
+          color={NUBANK_COLORS.ERROR}
+        />
       </TouchableOpacity>
     </View>
   );
@@ -318,9 +331,6 @@ export default function EstablishmentList({ onEdit, searchQuery = '' }) {
             `${establishments.length} estabelecimento${establishments.length !== 1 ? 's' : ''} cadastrado${establishments.length !== 1 ? 's' : ''}`
           )}
         </Text>
-        <TouchableOpacity onPress={forceReload} style={styles.refreshButton}>
-          <Text style={styles.refreshIcon}>🔄</Text>
-        </TouchableOpacity>
       </View>
 
       <FlatList
@@ -338,51 +348,40 @@ export default function EstablishmentList({ onEdit, searchQuery = '' }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc'
+    backgroundColor: NUBANK_COLORS.BACKGROUND
   },
   listHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#ffffff',
+    paddingHorizontal: NUBANK_SPACING.LG,
+    paddingVertical: NUBANK_SPACING.MD,
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb'
+    borderBottomColor: NUBANK_COLORS.BORDER
   },
   listHeaderText: {
-    fontSize: 14,
-    color: '#6b7280',
-    fontWeight: '500'
-  },
-  refreshButton: {
-    padding: 8
-  },
-  refreshIcon: {
-    fontSize: 18
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.TEXT_SECONDARY,
+    fontWeight: NUBANK_FONT_WEIGHTS.MEDIUM
   },
   list: {
-    padding: 16
+    padding: NUBANK_SPACING.LG
   },
   separator: {
-    height: 12
+    height: NUBANK_SPACING.MD
   },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    backgroundColor: NUBANK_COLORS.BACKGROUND,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
     flexDirection: 'row',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
-    overflow: 'hidden',
+    alignItems: 'center',
+    ...NUBANK_SHADOWS.MD,
     borderWidth: 1,
-    borderColor: '#f1f5f9'
+    borderColor: NUBANK_COLORS.BORDER
   },
   cardContent: {
     flex: 1,
-    padding: 16
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: NUBANK_SPACING.LG
   },
   cardMain: {
     flex: 1
@@ -391,10 +390,10 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   name: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 4
+    fontSize: NUBANK_FONT_SIZES.LG,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    color: NUBANK_COLORS.TEXT_PRIMARY,
+    marginBottom: NUBANK_SPACING.XS
   },
   categoriesContainer: {
     flexDirection: 'row',
@@ -402,21 +401,21 @@ const styles = StyleSheet.create({
     gap: 8
   },
   category: {
-    fontSize: 14,
-    color: '#3b82f6',
-    fontWeight: '500',
-    marginRight: 8
+    fontSize: NUBANK_FONT_SIZES.MD,
+    color: NUBANK_COLORS.PRIMARY,
+    fontWeight: NUBANK_FONT_WEIGHTS.MEDIUM,
+    marginRight: NUBANK_SPACING.SM
   },
   categoryEmpty: {
-    fontSize: 14,
-    color: '#9ca3af',
-    fontWeight: '400',
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.TEXT_TERTIARY,
+    fontWeight: NUBANK_FONT_WEIGHTS.REGULAR,
     fontStyle: 'italic'
   },
   address: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 8,
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.TEXT_SECONDARY,
+    marginBottom: NUBANK_SPACING.SM,
     lineHeight: 20
   },
   bottomInfo: {
@@ -425,72 +424,71 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between'
   },
   phone: {
-    fontSize: 14,
-    color: '#6b7280'
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.TEXT_SECONDARY
   },
   gpsTag: {
-    backgroundColor: '#dbeafe',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4
+    backgroundColor: `${NUBANK_COLORS.PRIMARY}15`,
+    paddingHorizontal: NUBANK_SPACING.SM,
+    paddingVertical: NUBANK_SPACING.XS,
+    borderRadius: NUBANK_BORDER_RADIUS.SM
   },
   gpsText: {
-    fontSize: 12,
-    color: '#3b82f6',
-    fontWeight: '600'
+    fontSize: NUBANK_FONT_SIZES.XS,
+    color: NUBANK_COLORS.PRIMARY,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD
   },
   deleteButton: {
-    backgroundColor: '#fee2e2',
-    justifyContent: 'center',
+    width: 50,
+    height: 50,
     alignItems: 'center',
-    width: 60
-  },
-  deleteText: {
-    fontSize: 20
+    justifyContent: 'center',
+    borderLeftWidth: 1,
+    borderLeftColor: NUBANK_COLORS.BORDER
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20
+    padding: NUBANK_SPACING.XL
   },
   loadingText: {
-    marginTop: 12,
-    color: '#6b7280',
-    fontSize: 16
+    marginTop: NUBANK_SPACING.MD,
+    color: NUBANK_COLORS.TEXT_SECONDARY,
+    fontSize: NUBANK_FONT_SIZES.MD
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40
+    padding: NUBANK_SPACING.XXL
   },
   emptyIcon: {
     fontSize: 64,
     marginBottom: 16
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 8
+    fontSize: NUBANK_FONT_SIZES.XL,
+    fontWeight: NUBANK_FONT_WEIGHTS.BOLD,
+    color: NUBANK_COLORS.TEXT_PRIMARY,
+    marginBottom: NUBANK_SPACING.SM
   },
   emptySubtitle: {
-    fontSize: 16,
-    color: '#6b7280',
+    fontSize: NUBANK_FONT_SIZES.MD,
+    color: NUBANK_COLORS.TEXT_SECONDARY,
     textAlign: 'center',
     lineHeight: 24,
-    marginBottom: 24
+    marginBottom: NUBANK_SPACING.XL
   },
   reloadButton: {
-    backgroundColor: '#3b82f6',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8
+    backgroundColor: NUBANK_COLORS.PRIMARY,
+    paddingHorizontal: NUBANK_SPACING.LG,
+    paddingVertical: NUBANK_SPACING.MD,
+    borderRadius: NUBANK_BORDER_RADIUS.LG
   },
   reloadButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600'
+    color: NUBANK_COLORS.TEXT_WHITE,
+    fontSize: NUBANK_FONT_SIZES.MD,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD
   }
 });

@@ -225,4 +225,51 @@ const styles = StyleSheet.create({
   clearButton: {
     marginLeft: NUBANK_SPACING.SM
   }
+  
+  addButtonText: {
+    color: NUBANK_COLORS.TEXT_WHITE,
+    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
+    fontSize: NUBANK_FONT_SIZES.SM
+  },
+  
+  searchContainer: {
+    paddingHorizontal: NUBANK_SPACING.LG,
+    paddingTop: NUBANK_SPACING.MD,
+    paddingBottom: NUBANK_SPACING.LG
+  },
+  
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
+    paddingLeft: NUBANK_SPACING.MD,
+    paddingRight: NUBANK_SPACING.SM,
+    height: 44,
+    borderWidth: 1,
+    borderColor: NUBANK_COLORS.BACKGROUND_SECONDARY
+  },
+  
+  searchInput: {
+    flex: 1,
+    fontSize: NUBANK_FONT_SIZES.MD,
+    color: NUBANK_COLORS.TEXT_PRIMARY,
+    height: 44,
+    paddingRight: NUBANK_SPACING.SM
+  },
+  
+  searchIconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: NUBANK_BORDER_RADIUS.MD,
+    backgroundColor: NUBANK_COLORS.PRIMARY + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: NUBANK_SPACING.XS
+  },
+  
+  clearButton: {
+    marginLeft: NUBANK_SPACING.SM,
+    padding: NUBANK_SPACING.XS
+  }
 });

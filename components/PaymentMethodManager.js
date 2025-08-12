@@ -4,10 +4,14 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity
+  TouchableOpacity,
+  TextInput,
+  Alert,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   NUBANK_COLORS,
   NUBANK_SPACING,
@@ -19,62 +23,111 @@ import {
 import PaymentMethodFormWithPreview from './PaymentMethodFormWithPreview';
 import PaymentMethodList from './PaymentMethodList';
 
-export default function PaymentMethodManager() {
+export default function PaymentMethodManager({ navigation }) {
+  const insets = useSafeAreaInsets();
+  
+  const [searchQuery, setSearchQuery] = useState('');
   const [formVisible, setFormVisible] = useState(false);
   const [editingMethod, setEditingMethod] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  const handleAdd = useCallback((initialName = '') => {
+  const handleNewMethod = useCallback(() => {
     setEditingMethod(null);
     setFormVisible(true);
   }, []);
 
-  const handleEdit = useCallback((method) => {
+  const handleEditMethod = useCallback((method) => {
     setEditingMethod(method);
     setFormVisible(true);
   }, []);
 
-  const handleFormClose = useCallback(() => {
+  const handleCloseForm = useCallback(() => {
     setFormVisible(false);
     setEditingMethod(null);
   }, []);
 
-  const handleFormSaved = useCallback(() => {
+  const handleSaveMethod = useCallback(() => {
+    setFormVisible(false);
+    setEditingMethod(null);
     setRefreshTrigger(prev => prev + 1);
-    handleFormClose();
-  }, [handleFormClose]);
+  }, []);
+
+  const clearSearch = () => {
+    setSearchQuery('');
+  };
 
   return (
-    <View style={styles.container}>
-      {/* Header padrão Nubank */}
-      <View style={styles.header}>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top }]}>
         <View style={styles.headerContent}>
-          <View style={styles.titleContainer}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
             <MaterialCommunityIcons
-              name="credit-card"
+              name="arrow-left"
               size={24}
-              color={NUBANK_COLORS.PRIMARY}
-              style={styles.titleIcon}
+              color={NUBANK_COLORS.TEXT_WHITE}
             />
-            <Text style={styles.title}>Formas de Pagamento</Text>
+          </TouchableOpacity>
+
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>Formas de Pagamento</Text>
+            <Text style={styles.headerSubtitle}>Gerenciar formas de pagamento</Text>
           </View>
 
-          <TouchableOpacity style={styles.addButton} onPress={handleAdd}>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={handleNewMethod}
+          >
             <MaterialCommunityIcons
               name="plus"
-              size={20}
+              size={24}
               color={NUBANK_COLORS.TEXT_WHITE}
-              style={styles.addButtonIcon}
             />
-            <Text style={styles.addButtonText}>Nova</Text>
           </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Barra de pesquisa */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputWrapper}>
+          <MaterialCommunityIcons
+            name="magnify"
+            size={20}
+            color={NUBANK_COLORS.TEXT_SECONDARY}
+            style={styles.searchIcon}
+          />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar forma de pagamento..."
+            placeholderTextColor={NUBANK_COLORS.TEXT_TERTIARY}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+              <MaterialCommunityIcons
+                name="close-circle"
+                size={20}
+                color={NUBANK_COLORS.TEXT_SECONDARY}
+              />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
       {/* Lista de formas de pagamento */}
       <PaymentMethodList
-        onEdit={handleEdit}
-        onAdd={handleAdd}
+        searchQuery={searchQuery}
+        onEdit={handleEditMethod}
+        onAdd={handleNewMethod}
         refreshTrigger={refreshTrigger}
       />
 
@@ -82,67 +135,95 @@ export default function PaymentMethodManager() {
       <PaymentMethodFormWithPreview
         visible={formVisible}
         paymentMethod={editingMethod}
-        onClose={handleFormClose}
-        onSaved={handleFormSaved}
+        onClose={handleCloseForm}
+        onSaved={handleSaveMethod}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY
+    backgroundColor: NUBANK_COLORS.BACKGROUND
   },
   
   header: {
-    backgroundColor: NUBANK_COLORS.BACKGROUND,
+    backgroundColor: NUBANK_COLORS.PRIMARY,
     paddingHorizontal: NUBANK_SPACING.LG,
-    paddingTop: NUBANK_SPACING.LG,
-    paddingBottom: NUBANK_SPACING.LG,
-    borderBottomWidth: 1,
-    borderBottomColor: NUBANK_COLORS.CARD_BORDER
+    paddingBottom: NUBANK_SPACING.LG
   },
   
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between'
+    marginTop: NUBANK_SPACING.MD
   },
   
-  titleContainer: {
-    flexDirection: 'row',
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: NUBANK_BORDER_RADIUS.ROUND,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: NUBANK_SPACING.MD
+  },
+  
+  headerTitleContainer: {
     flex: 1
   },
   
-  titleIcon: {
-    marginRight: NUBANK_SPACING.SM
+  headerTitle: {
+    fontSize: NUBANK_FONT_SIZES.LG,
+    fontWeight: NUBANK_FONT_WEIGHTS.BOLD,
+    color: NUBANK_COLORS.TEXT_WHITE,
+    marginBottom: NUBANK_SPACING.XS
   },
   
-  title: {
-    fontSize: NUBANK_FONT_SIZES.XL,
-    fontWeight: NUBANK_FONT_WEIGHTS.BOLD,
-    color: NUBANK_COLORS.TEXT_PRIMARY
+  headerSubtitle: {
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.TEXT_WHITE,
+    opacity: 0.9
   },
   
   addButton: {
-    backgroundColor: NUBANK_COLORS.PRIMARY,
+    width: 40,
+    height: 40,
+    borderRadius: NUBANK_BORDER_RADIUS.ROUND,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: NUBANK_SPACING.MD
+  },
+  
+  searchContainer: {
+    paddingHorizontal: NUBANK_SPACING.LG,
+    paddingVertical: NUBANK_SPACING.MD,
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY
+  },
+  
+  searchInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: NUBANK_COLORS.BACKGROUND,
+    borderRadius: NUBANK_BORDER_RADIUS.LG,
     paddingHorizontal: NUBANK_SPACING.MD,
-    paddingVertical: NUBANK_SPACING.SM,
-    borderRadius: NUBANK_BORDER_RADIUS.MD,
     ...NUBANK_SHADOWS.SM
   },
   
-  addButtonIcon: {
-    marginRight: NUBANK_SPACING.XS
+  searchIcon: {
+    marginRight: NUBANK_SPACING.SM
   },
   
-  addButtonText: {
-    color: NUBANK_COLORS.TEXT_WHITE,
-    fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
-    fontSize: NUBANK_FONT_SIZES.SM
+  searchInput: {
+    flex: 1,
+    paddingVertical: NUBANK_SPACING.MD,
+    fontSize: NUBANK_FONT_SIZES.MD,
+    color: NUBANK_COLORS.TEXT_PRIMARY
+  },
+  
+  clearButton: {
+    marginLeft: NUBANK_SPACING.SM
   }
 });

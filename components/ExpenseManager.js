@@ -12,8 +12,12 @@ import {
   Modal,
   TextInput,
   ScrollView,
-  StatusBar
+  StatusBar,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../services/AuthContext';
 import { formatCurrency, formatDate } from '../utils/helpers';
@@ -27,7 +31,8 @@ import {
   NUBANK_FONT_WEIGHTS
 } from '../constants/nubank-theme';
 
-export default function ExpenseManager() {
+export default function ExpenseManager({ navigation }) {
+  const insets = useSafeAreaInsets();
   const db = useSQLiteContext();
   const { user } = useAuth();
 
@@ -344,8 +349,48 @@ export default function ExpenseManager() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <StatusBar barStyle='light-content' backgroundColor={NUBANK_COLORS.PRIMARY} />
+
+      {/* Header com gradiente */}
+      <LinearGradient
+        colors={NUBANK_COLORS.GRADIENT_PRIMARY}
+        style={[styles.header, { paddingTop: insets.top }]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <View style={styles.headerContent}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <MaterialCommunityIcons
+              name="arrow-left"
+              size={24}
+              color={NUBANK_COLORS.TEXT_WHITE}
+            />
+          </TouchableOpacity>
+
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>Despesas</Text>
+            <Text style={styles.headerSubtitle}>Gerenciar suas despesas</Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={openNewExpense}
+          >
+            <MaterialCommunityIcons
+              name="plus"
+              size={24}
+              color={NUBANK_COLORS.TEXT_WHITE}
+            />
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
 
       {/* Lista de despesas */}
       <FlatList
@@ -377,10 +422,6 @@ export default function ExpenseManager() {
         showsVerticalScrollIndicator={false}
       />
 
-      {/* Botão flutuante */}
-      <TouchableOpacity style={styles.fab} onPress={openNewExpense} activeOpacity={0.8}>
-        <MaterialCommunityIcons name='plus' size={28} color={NUBANK_COLORS.TEXT_WHITE} />
-      </TouchableOpacity>
 
       {/* Modal de adicionar/editar despesa */}
       <Modal visible={modalVisible} animationType='slide' presentationStyle='pageSheet'>
@@ -467,7 +508,7 @@ export default function ExpenseManager() {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -475,6 +516,54 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: NUBANK_COLORS.BACKGROUND
+  },
+  
+  header: {
+    paddingHorizontal: NUBANK_SPACING.LG,
+    paddingBottom: NUBANK_SPACING.LG
+  },
+  
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: NUBANK_SPACING.MD
+  },
+  
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: NUBANK_BORDER_RADIUS.ROUND,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: NUBANK_SPACING.MD
+  },
+  
+  headerTitleContainer: {
+    flex: 1
+  },
+  
+  headerTitle: {
+    fontSize: NUBANK_FONT_SIZES.LG,
+    fontWeight: NUBANK_FONT_WEIGHTS.BOLD,
+    color: NUBANK_COLORS.TEXT_WHITE,
+    marginBottom: NUBANK_SPACING.XS
+  },
+  
+  headerSubtitle: {
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.TEXT_WHITE,
+    opacity: 0.9
+  },
+  
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: NUBANK_BORDER_RADIUS.ROUND,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: NUBANK_SPACING.MD
   },
   loadingContainer: {
     flex: 1,

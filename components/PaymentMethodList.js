@@ -23,12 +23,11 @@ import {
   NUBANK_FONT_WEIGHTS
 } from '../constants/nubank-theme';
 
-export default function PaymentMethodList({ onEdit, onAdd, refreshTrigger }) {
+export default function PaymentMethodList({ onEdit, onAdd, refreshTrigger, searchQuery = '' }) {
   const db = useSQLiteContext();
   const { user } = useAuth();
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchText, setSearchText] = useState('');
 
   // Carrega dados quando componente monta ou refreshTrigger muda
   useEffect(() => {
@@ -111,9 +110,9 @@ export default function PaymentMethodList({ onEdit, onAdd, refreshTrigger }) {
     }
   };
 
-  // Filtra formas de pagamento baseado na pesquisa
+  // Filtra formas de pagamento baseado na pesquisa externa
   const filteredMethods = paymentMethods.filter(method =>
-    method.name.toLowerCase().includes(searchText.toLowerCase())
+    method.name.toLowerCase().includes(searchQuery.toLowerCase().trim())
   );
 
   const renderPaymentMethod = ({ item }) => (
@@ -129,13 +128,15 @@ export default function PaymentMethodList({ onEdit, onAdd, refreshTrigger }) {
 
         <View style={styles.methodInfo}>
           <Text style={styles.methodName}>{item.name}</Text>
+          <Text style={styles.methodDate}>
+            Criada em {new Date(item.created_at || Date.now()).toLocaleDateString('pt-BR')}
+          </Text>
         </View>
 
         <MaterialCommunityIcons
-          name="pencil"
-          size={16}
+          name="chevron-right"
+          size={20}
           color={NUBANK_COLORS.TEXT_TERTIARY}
-          style={styles.editIcon}
         />
       </TouchableOpacity>
 
@@ -145,7 +146,7 @@ export default function PaymentMethodList({ onEdit, onAdd, refreshTrigger }) {
         activeOpacity={0.7}
       >
         <MaterialCommunityIcons
-          name="delete-outline"
+          name="delete"
           size={20}
           color={NUBANK_COLORS.ERROR}
         />
@@ -187,11 +188,11 @@ export default function PaymentMethodList({ onEdit, onAdd, refreshTrigger }) {
       <TouchableOpacity
         style={styles.createFromSearchButton}
         onPress={() => {
-          if (onAdd) onAdd(searchText);
+          if (onAdd) onAdd(searchQuery);
         }}
       >
         <MaterialCommunityIcons name="plus" size={16} color={NUBANK_COLORS.PRIMARY} />
-        <Text style={styles.createFromSearchText}>Criar forma "{searchText}"</Text>
+        <Text style={styles.createFromSearchText}>Criar forma "{searchQuery}"</Text>
       </TouchableOpacity>
     </View>
   );
@@ -212,76 +213,24 @@ export default function PaymentMethodList({ onEdit, onAdd, refreshTrigger }) {
 
   return (
     <View style={styles.container}>
-      {/* Barra de pesquisa - só aparece se houver formas de pagamento */}
-      {paymentMethods.length > 0 && (
-        <View style={styles.searchContainer}>
-          <View style={styles.searchInputContainer}>
-            <MaterialCommunityIcons
-              name="magnify"
-              size={20}
-              color={NUBANK_COLORS.TEXT_TERTIARY}
-              style={styles.searchIcon}
-            />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Pesquisar formas de pagamento..."
-              placeholderTextColor={NUBANK_COLORS.TEXT_TERTIARY}
-              value={searchText}
-              onChangeText={setSearchText}
-              onSubmitEditing={() => Keyboard.dismiss()}
-              returnKeyType="search"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {searchText.length > 0 && (
-              <TouchableOpacity
-                onPress={() => setSearchText('')}
-                style={styles.clearButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <MaterialCommunityIcons
-                  name="close"
-                  size={20}
-                  color={NUBANK_COLORS.TEXT_TERTIARY}
-                />
-              </TouchableOpacity>
-            )}
-          </View>
 
-          {searchText.length > 0 && (
-            <Text style={styles.searchResults}>
-              {filteredMethods.length === 0
-                ? 'Nenhuma forma encontrada'
-                : `${filteredMethods.length} forma${filteredMethods.length !== 1 ? 's' : ''} encontrada${filteredMethods.length !== 1 ? 's' : ''}`}
-            </Text>
-          )}
-        </View>
-      )}
-
-      {/* Header da lista com contador e refresh */}
+      {/* Header da lista com contador */}
       {paymentMethods.length > 0 && (
         <View style={styles.listHeader}>
           <Text style={styles.listHeaderText}>
-            {searchText.trim() ? (
+            {searchQuery.trim() ? (
               `${filteredMethods.length} de ${paymentMethods.length} forma${paymentMethods.length !== 1 ? 's' : ''} de pagamento`
             ) : (
               `${paymentMethods.length} forma${paymentMethods.length !== 1 ? 's' : ''} de pagamento cadastrada${paymentMethods.length !== 1 ? 's' : ''}`
             )}
           </Text>
-          <TouchableOpacity onPress={forceReload} style={styles.refreshButton}>
-            <MaterialCommunityIcons
-              name="refresh"
-              size={18}
-              color={NUBANK_COLORS.TEXT_SECONDARY}
-            />
-          </TouchableOpacity>
         </View>
       )}
 
       {/* Lista */}
       {paymentMethods.length === 0 ? (
         renderEmptyState()
-      ) : filteredMethods.length === 0 ? (
+      ) : filteredMethods.length === 0 && searchQuery.trim() ? (
         renderNoResults()
       ) : (
         <FlatList
@@ -301,7 +250,7 @@ export default function PaymentMethodList({ onEdit, onAdd, refreshTrigger }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY
+    backgroundColor: NUBANK_COLORS.BACKGROUND
   },
 
   // Search
@@ -315,24 +264,17 @@ const styles = StyleSheet.create({
 
   // List header
   listHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: NUBANK_SPACING.LG,
-    paddingVertical: NUBANK_SPACING.SM,
-    backgroundColor: NUBANK_COLORS.BACKGROUND,
+    paddingVertical: NUBANK_SPACING.MD,
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY,
     borderBottomWidth: 1,
-    borderBottomColor: NUBANK_COLORS.CARD_BORDER
+    borderBottomColor: NUBANK_COLORS.BORDER
   },
 
   listHeaderText: {
     fontSize: NUBANK_FONT_SIZES.SM,
     color: NUBANK_COLORS.TEXT_SECONDARY,
     fontWeight: NUBANK_FONT_WEIGHTS.MEDIUM
-  },
-
-  refreshButton: {
-    padding: NUBANK_SPACING.XS
   },
 
   searchInputContainer: {
@@ -373,7 +315,7 @@ const styles = StyleSheet.create({
   },
 
   separator: {
-    height: NUBANK_SPACING.SM
+    height: NUBANK_SPACING.MD
   },
 
   methodCard: {
@@ -381,10 +323,9 @@ const styles = StyleSheet.create({
     borderRadius: NUBANK_BORDER_RADIUS.LG,
     flexDirection: 'row',
     alignItems: 'center',
-    ...NUBANK_SHADOWS.SM,
-    overflow: 'hidden',
+    ...NUBANK_SHADOWS.MD,
     borderWidth: 1,
-    borderColor: NUBANK_COLORS.CARD_BORDER
+    borderColor: NUBANK_COLORS.BORDER
   },
 
   methodContent: {
@@ -395,19 +336,17 @@ const styles = StyleSheet.create({
   },
 
   methodIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: NUBANK_BORDER_RADIUS.LG,
-    backgroundColor: NUBANK_COLORS.BACKGROUND_TERTIARY,
+    width: 50,
+    height: 50,
+    borderRadius: NUBANK_BORDER_RADIUS.ROUND,
+    backgroundColor: NUBANK_COLORS.BACKGROUND_SECONDARY,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: NUBANK_SPACING.MD,
-    borderWidth: 1,
-    borderColor: NUBANK_COLORS.CARD_BORDER
+    marginRight: NUBANK_SPACING.MD
   },
 
   methodIcon: {
-    fontSize: 20
+    fontSize: 24
   },
 
   methodInfo: {
@@ -415,24 +354,24 @@ const styles = StyleSheet.create({
   },
 
   methodName: {
-    fontSize: NUBANK_FONT_SIZES.MD,
+    fontSize: NUBANK_FONT_SIZES.LG,
     fontWeight: NUBANK_FONT_WEIGHTS.SEMIBOLD,
-    color: NUBANK_COLORS.TEXT_PRIMARY
+    color: NUBANK_COLORS.TEXT_PRIMARY,
+    marginBottom: NUBANK_SPACING.XS
   },
 
-  editIcon: {
-    marginLeft: NUBANK_SPACING.SM
+  methodDate: {
+    fontSize: NUBANK_FONT_SIZES.SM,
+    color: NUBANK_COLORS.TEXT_SECONDARY
   },
 
   deleteButton: {
-    backgroundColor: '#FEF2F2',
-    justifyContent: 'center',
+    width: 50,
+    height: 50,
     alignItems: 'center',
-    paddingHorizontal: NUBANK_SPACING.LG,
-    minWidth: 60,
-    alignSelf: 'stretch',
+    justifyContent: 'center',
     borderLeftWidth: 1,
-    borderLeftColor: 'rgba(239, 68, 68, 0.1)'
+    borderLeftColor: NUBANK_COLORS.BORDER
   },
 
   // Empty states
